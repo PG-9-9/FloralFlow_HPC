@@ -1,6 +1,5 @@
 # 🌸 FloralFlow HPC
 
-> **Real-time Botanical Digital Twin & Telemetric Dashboard for Slurm Clusters**
 
 ---
 
