@@ -1,0 +1,3073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FloralView HPC</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌸</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --glass-bg: rgba(6, 12, 26, 0.94);
+      --glass-border: rgba(255, 255, 255, 0.16);
+      --btn-grad: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: #020409;
+      color: var(--text-main);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    #meadow-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      cursor: grab;
+    }
+    #meadow-canvas:active {
+      cursor: grabbing;
+    }
+
+    .vignette-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+      background: radial-gradient(circle at 50% 30%, rgba(0,0,0,0) 45%, rgba(2, 4, 10, 0.75) 100%);
+    }
+
+    /* =========================================================================
+       FLOATING ZEN HUD (Single compact 44px capsule, zero collisions with sky)
+       ========================================================================= */
+    .zen-hud {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      height: 44px;
+      width: calc(100vw - 32px);
+      max-width: 1440px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      background: rgba(8, 14, 26, 0.85);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 9999px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.08);
+      pointer-events: auto;
+      overflow: hidden;
+    }
+
+    .hud-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .hud-logo {
+      font-size: 18px;
+      filter: drop-shadow(0 0 8px rgba(244, 114, 182, 0.7));
+    }
+    .hud-title-box {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .hud-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+    .hud-badge {
+      font-family: 'Outfit', sans-serif;
+      font-size: 9px;
+      color: #94a3b8;
+      letter-spacing: 1px;
+      padding: 1px 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .hud-pulse {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      background: #34d399;
+      border-radius: 50%;
+      margin-right: 4px;
+      box-shadow: 0 0 6px #34d399;
+      animation: pulseGlow 1.8s infinite;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 10px #34d399; }
+    }
+
+    .hud-live-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(52, 211, 153, 0.28);
+      border-radius: 9999px;
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #34d399;
+      letter-spacing: 0.5px;
+      transition: all 0.3s ease;
+    }
+    .hud-live-tag.syncing {
+      background: rgba(16, 185, 129, 0.35);
+      border-color: #34d399;
+      color: #6ee7b7;
+    }
+    .hud-live-tag.syncing .hud-pulse {
+      transform: scale(1.6);
+      box-shadow: 0 0 10px #34d399;
+      background: #6ee7b7;
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    /* Glanceable Zen Metrics */
+    .hud-metrics {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #cbd5e1;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .stat-pill strong { color: #fff; }
+    .hud-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .hud-dot.running { background: #34d399; box-shadow: 0 0 6px #34d399; }
+    .hud-dot.pending { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
+    .hud-dot.dep { background: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
+
+    /* Scrollable Filter Track inside HUD */
+    .hud-filters-wrapper {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent);
+    }
+    .hud-filters {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      padding: 2px 10px;
+      cursor: grab;
+      user-select: none;
+      width: 100%;
+    }
+    .hud-filters:active {
+      cursor: grabbing;
+    }
+    .hud-filters::-webkit-scrollbar { display: none; }
+    .hud-scroll-arrow {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #94a3b8;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+    .hud-scroll-arrow:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .cluster-tag {
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .cluster-tag:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+    .cluster-tag.active {
+      background: rgba(244, 114, 182, 0.22);
+      border-color: #f472b6;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 0 12px rgba(244, 114, 182, 0.3);
+    }
+
+    /* Layers inside HUD */
+    .hud-layers {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .toggle-chip {
+      font-size: 11px;
+      padding: 4px 9px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .toggle-chip:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .toggle-chip.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: #38bdf8;
+      color: #e0f2fe;
+      font-weight: 600;
+    }
+
+    /* Actions inside HUD */
+    .hud-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn {
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+    .btn-hud-icon {
+      padding: 5px 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 50%;
+      color: #fff;
+      font-size: 11px;
+    }
+    .btn-hud-icon:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+    .btn-hud-user {
+      padding: 5px 12px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 9999px;
+      color: #e2e8f0;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+    }
+    .btn-hud-user:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: var(--glass-bg);
+      color: var(--text-main);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(12px);
+    }
+    .btn-primary {
+      background: var(--btn-grad);
+      color: #fff;
+    }
+
+    /* Login & Logout Buttons */
+    .btn-hud-login {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(56, 189, 248, 0.22));
+      border: 1px solid rgba(52, 211, 153, 0.6);
+      color: #a7f3d0;
+      padding: 5px 14px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+    }
+    .btn-hud-login:hover {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.45), rgba(56, 189, 248, 0.45));
+      border-color: #34d399;
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+    }
+    .btn-hud-logout {
+      background: rgba(225, 29, 72, 0.18);
+      border: 1px solid rgba(244, 63, 94, 0.45);
+      color: #fecdd3;
+      padding: 5px 13px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-hud-logout:hover {
+      background: rgba(225, 29, 72, 0.35);
+      border-color: #f43f5e;
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);
+    }
+
+    /* View Switcher: Positioned right below the top navigation bar */
+    #view-mode-bar {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 95;
+      display: flex;
+      align-items: center;
+      pointer-events: auto;
+    }
+    .view-toggle-pill {
+      display: inline-flex;
+      background: rgba(8, 14, 26, 0.85);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      padding: 4px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+      gap: 4px;
+    }
+    .view-tab-btn {
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 18px;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: all 0.22s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .view-tab-btn:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .view-tab-btn.active {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(56, 189, 248, 0.4));
+      color: #ffffff;
+      border: 1px solid rgba(52, 211, 153, 0.55);
+      box-shadow: 0 2px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Telemetry View Overlay */
+    #telemetry-view {
+      position: fixed;
+      top: 102px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 90;
+      overflow-y: auto;
+      padding: 18px 32px 50px;
+      background: radial-gradient(circle at 50% 10%, rgba(15, 23, 42, 0.92), rgba(2, 6, 18, 0.98));
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .telemetry-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* KPI Summary Row */
+    .telemetry-kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px;
+    }
+    .kpi-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+    .kpi-icon {
+      font-size: 24px;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .kpi-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .kpi-num {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1.1;
+    }
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    /* Telemetry Sections */
+    .telemetry-section {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .telemetry-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+    .section-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    /* Active Workloads Grid */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
+    }
+    .telemetry-card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-left: 4px solid #38bdf8;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .telemetry-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+    .telemetry-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .telemetry-card-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .telemetry-card-status {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .telemetry-card-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .meta-box {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .meta-box span:first-child {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+    .meta-box strong {
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .telemetry-progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+    .telemetry-progress-fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #10b981, #38bdf8);
+      transition: width 0.3s ease;
+    }
+
+    /* Completed Jobs Table */
+    .telemetry-completed-table-wrapper {
+      overflow-x: auto;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(10, 16, 28, 0.6);
+    }
+    .telemetry-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    .telemetry-table th {
+      background: rgba(15, 23, 42, 0.85);
+      color: #94a3b8;
+      font-weight: 600;
+      padding: 11px 14px;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .telemetry-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: #e2e8f0;
+      font-family: inherit;
+    }
+    .telemetry-table tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .state-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .state-completed {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+    .state-failed {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(248, 113, 113, 0.3);
+    }
+    .state-cancelled {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+    .state-timeout {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(192, 132, 252, 0.3);
+    }
+
+    /* Botanical Specimen Inspector Card */
+    .specimen-card {
+      position: absolute;
+      z-index: 30;
+      pointer-events: none;
+      background: rgba(8, 14, 26, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(244, 114, 182, 0.45);
+      border-radius: 14px;
+      padding: 14px 18px;
+      color: #fff;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8), 0 0 24px rgba(244, 114, 182, 0.2);
+      display: none;
+      min-width: 310px;
+      max-width: 370px;
+      transform: translate(-50%, -108%);
+      transition: opacity 0.15s ease;
+    }
+
+    .specimen-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 8px;
+    }
+    .specimen-title-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .specimen-icon {
+      font-size: 22px;
+      filter: drop-shadow(0 0 6px rgba(244, 114, 182, 0.5));
+    }
+    .specimen-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: #f472b6;
+      display: block;
+    }
+    .specimen-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+
+    .tooltip-status {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .status-running { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+    .status-pending { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+
+    /* Growth Progress Meter */
+    .specimen-meter-box {
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .meter-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .meter-labels span:last-child {
+      color: #34d399;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .meter-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #f472b6 100%);
+      border-radius: 9999px;
+      transition: width 0.3s ease;
+    }
+
+    .specimen-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 14px;
+      font-size: 11px;
+    }
+    .grid-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .grid-item.full-width {
+      grid-column: 1 / -1;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .item-label {
+      font-size: 10px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .item-value {
+      color: #f1f5f9;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+
+    /* Auth Overlay */
+    #auth-overlay {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 99999 !important;
+      background: rgba(2, 4, 10, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-card {
+      background: rgba(10, 16, 32, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 20px;
+      width: 380px;
+      padding: 34px 28px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+      position: relative;
+    }
+
+    .auth-close-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #94a3b8;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .auth-close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .auth-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 4px;
+      color: #fff;
+    }
+
+    .auth-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 22px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 11px 13px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+    }
+    .form-control:focus {
+      border-color: #f472b6;
+    }
+
+    .auth-tabs {
+      display: flex;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 18px;
+    }
+
+    .auth-tab {
+      flex: 1;
+      text-align: center;
+      padding: 7px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+    }
+    .auth-tab.active {
+      color: #f472b6;
+      border-color: #f472b6;
+      font-weight: 600;
+    }
+
+    .auth-submit {
+      width: 100%;
+      padding: 11px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 10px;
+      margin-top: 6px;
+    }
+
+    .auth-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="meadow-canvas"></canvas>
+  <div class="vignette-overlay"></div>
+
+  <!-- Floating Zen HUD (Consolidates Brand, Metrics, Bed Filters, View Toggles & User in 44px) -->
+  <nav class="zen-hud">
+    <div class="hud-brand">
+      <span class="hud-logo">🌸</span>
+      <div class="hud-title-box">
+        <span class="hud-title">FloralView</span>
+        <span class="hud-badge"><span class="hud-pulse"></span>SLURM LIVE</span>
+      </div>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <!-- Glanceable Zen Metrics -->
+    <div class="hud-metrics">
+      <span class="stat-pill" title="Active running HPC tasks">
+        <span class="hud-dot running"></span> <strong id="stat-running">0</strong> Active
+      </span>
+      <span class="stat-pill" title="Queued seeds waiting on dependencies">
+        <span class="hud-dot pending"></span> <strong id="stat-pending">0</strong> Seeds
+      </span>
+      <span class="stat-pill" title="Linked dependency flows">
+        <span class="hud-dot dep"></span> <strong id="stat-deps">0</strong> Brooks
+      </span>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <!-- Horizontal View Filter: Default All Jobs Only -->
+    <div class="hud-filters-wrapper">
+      <div class="hud-filters" id="cluster-bar">
+        <div class="cluster-tag active" data-cluster="all">🌿 All (<span id="total-jobs">0</span>)</div>
+      </div>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <!-- View Layer Toggles -->
+    <div class="hud-layers">
+      <div class="toggle-chip active" id="toggle-seeds" title="Toggle Crystal Water Brook">
+        <span>💧</span> Brook
+      </div>
+      <div class="toggle-chip active" id="toggle-beds" title="Toggle Terraced Beds">
+        <span>🏝️</span> Beds
+      </div>
+      <div class="toggle-chip" id="toggle-nodes" title="Toggle Slurm Nodes">
+        <span>🖥️</span> Nodes
+      </div>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <!-- Quick Actions -->
+    <div class="hud-actions">
+      <div class="hud-live-tag" id="live-sync-badge" title="Refreshing Slurm live telemetry frequently">
+        <span class="hud-pulse" style="margin: 0;"></span> <span id="live-sync-text">LIVE 2s</span>
+      </div>
+      <button class="btn btn-hud-icon" id="btn-recenter" title="Auto-Frame View (or double-click meadow)">
+        🎯
+      </button>
+      <button class="btn btn-hud-icon" id="btn-refresh" title="Manually Sync Slurm">
+        🔄
+      </button>
+      <button class="btn btn-hud-user" id="btn-user-profile" onclick="window.showLoginModal && window.showLoginModal()" title="Current HPC User Profile / Switch Account">
+        👤 <span id="user-display-name">Guest</span>
+      </button>
+      <button class="btn btn-hud-login" id="btn-login" onclick="window.showLoginModal && window.showLoginModal()" title="Login to Slurm Cluster">
+        🔑 Login
+      </button>
+      <button class="btn btn-hud-logout" id="btn-logout" title="Sign Out of HPC Meadow">
+        🚪 Logout
+      </button>
+    </div>
+  </nav>
+
+  <!-- View Switcher (Below Top Navigation Bar) -->
+  <div id="view-mode-bar">
+    <div class="view-toggle-pill">
+      <button class="view-tab-btn active" id="tab-floral-view">
+        <span>🌸 Floral Meadow</span>
+      </button>
+      <button class="view-tab-btn" id="tab-telemetry-view">
+        <span>📊 Telemetric View</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Telemetric View Dashboard -->
+  <div id="telemetry-view" style="display: none;">
+    <div class="telemetry-content">
+      <!-- KPI Stats Strip -->
+      <div class="telemetry-kpi-row" id="telemetry-kpis"></div>
+
+      <!-- Live Active Workloads Section -->
+      <div class="telemetry-section">
+        <div class="telemetry-section-header">
+          <div class="section-title">
+            <span class="section-icon">⚡</span>
+            <h3>Active Slurm Workloads & Clusters</h3>
+          </div>
+          <span class="section-badge" id="telemetry-active-count">0 Active</span>
+        </div>
+        <div class="telemetry-grid" id="telemetry-active-grid"></div>
+      </div>
+
+      <!-- Last Completed Jobs Section -->
+      <div class="telemetry-section">
+        <div class="telemetry-section-header">
+          <div class="section-title">
+            <span class="section-icon">🏁</span>
+            <h3>Recently Completed Jobs (Slurm Accounting)</h3>
+          </div>
+          <span class="section-badge" id="telemetry-completed-count">0 Completed</span>
+        </div>
+        <div class="telemetry-completed-table-wrapper">
+          <table class="telemetry-table" id="telemetry-completed-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Job ID</th>
+                <th>Job Name</th>
+                <th>Duration</th>
+                <th>Compute Node(s)</th>
+                <th>Started</th>
+                <th>Finished</th>
+                <th>Exit Code</th>
+              </tr>
+            </thead>
+            <tbody id="telemetry-completed-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- High-Craft Botanical Specimen Inspector Card -->
+  <div id="job-tooltip" class="specimen-card">
+    <div class="specimen-header">
+      <div class="specimen-title-row">
+        <span class="specimen-icon" id="tt-icon">🌸</span>
+        <div>
+          <span class="specimen-id" id="tt-id">#000000</span>
+          <div class="specimen-name" id="tt-name">Job Name</div>
+        </div>
+      </div>
+      <span class="tooltip-status status-running" id="tt-status">RUNNING</span>
+    </div>
+
+    <!-- Botanical Progress Meter -->
+    <div class="specimen-meter-box">
+      <div class="meter-labels">
+        <span>Walltime Growth</span>
+        <span id="tt-progress-pct">0%</span>
+      </div>
+      <div class="meter-track">
+        <div class="meter-fill" id="tt-progress-bar" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Telemetry Details Grid -->
+    <div class="specimen-grid">
+      <div class="grid-item">
+        <span class="item-label">Sanctuary Bed</span>
+        <strong class="item-value" id="tt-cluster">Cluster</strong>
+      </div>
+      <div class="grid-item">
+        <span class="item-label">Elapsed Time</span>
+        <strong class="item-value" id="tt-time">00h 00m 00s</strong>
+      </div>
+      <div class="grid-item">
+        <span class="item-label">Allocated Node</span>
+        <strong class="item-value" id="tt-node">None</strong>
+      </div>
+      <div class="grid-item">
+        <span class="item-label">Slurm Limit</span>
+        <strong class="item-value" id="tt-walltime">Limit</strong>
+      </div>
+      <div class="grid-item full-width">
+        <span class="item-label">Dependency Source</span>
+        <strong class="item-value" id="tt-dep">None (Independent)</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Modal Overlay -->
+  <div id="auth-overlay">
+    <div class="auth-card">
+      <button type="button" id="auth-close-btn" class="auth-close-btn" title="Close">✕</button>
+      <div style="font-size: 34px; text-align: center; margin-bottom: 6px;">🌸</div>
+      <h2 class="auth-title">FloralView HPC</h2>
+
+      <form id="auth-form" style="margin-top: 20px;">
+        <div class="form-group">
+          <label for="input-username">HPC Username</label>
+          <input type="text" id="input-username" class="form-control" placeholder="e.g. vishaal" required value="vishaal">
+        </div>
+        <div class="form-group">
+          <label for="input-password">Cluster Token / Password</label>
+          <input type="password" id="input-password" class="form-control" placeholder="Enter cluster password (e.g. slurm2026)" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary auth-submit" id="auth-submit-btn">
+          Enter Floral Meadow
+        </button>
+      </form>
+
+      <div class="auth-note">
+        💡 Connected to live Slurm cluster • Sessions preserved automatically.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Early global declaration so inline triggers always work immediately
+    window.showLoginModal = function() {
+      const modal = document.getElementById('auth-overlay');
+      if (modal) modal.style.display = 'flex';
+      const currentUser = localStorage.getItem('floraflow_user');
+      const nameEl = document.getElementById('user-display-name');
+      if (nameEl) nameEl.textContent = currentUser || 'Guest';
+      const outBtn = document.getElementById('btn-logout');
+      const inBtn = document.getElementById('btn-login');
+      if (currentUser) {
+        if (outBtn) outBtn.style.display = 'inline-flex';
+        if (inBtn) inBtn.style.display = 'none';
+      } else {
+        if (outBtn) outBtn.style.display = 'none';
+        if (inBtn) inBtn.style.display = 'inline-flex';
+      }
+      const userField = document.getElementById('input-username');
+      if (userField && !userField.value) userField.value = currentUser || 'vishaal';
+      const passField = document.getElementById('input-password');
+      if (passField) {
+        passField.value = '';
+        setTimeout(() => passField.focus(), 60);
+      }
+    };
+
+    /* =========================================================================
+       1. DATA ENGINE & SLURM SYNC
+       ========================================================================= */
+    let liveJobs = [];
+    let liveClusters = [];
+    let liveDependencies = [];
+    let liveCompletedJobs = [];
+    let flowerEntities = [];
+    let activeFilter = 'all';
+    let activeView = 'floral'; // 'floral' or 'telemetry'
+    let hoveredJob = null;
+    let timeTick = 0;
+    let breezeStrength = 3;
+
+    let showSeeds = true;
+    let showNodeLabels = false;
+    let highlightBeds = true;
+
+    function formatSeconds(totalSec) {
+      if (!totalSec || totalSec <= 0) return "0:00:00";
+      const d = Math.floor(totalSec / 86400);
+      const rem = totalSec % 86400;
+      const h = Math.floor(rem / 3600);
+      const m = Math.floor((rem % 3600) / 60);
+      const s = Math.floor(rem % 60);
+      const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      return d > 0 ? `${d}-${timeStr}` : timeStr;
+    }
+
+    async function fetchClusterJobs() {
+      const user = localStorage.getItem('floraflow_user');
+      if (!user) {
+        // Not authenticated yet! Do not fetch or poll
+        return;
+      }
+      const syncBadge = document.getElementById('live-sync-badge');
+      if (syncBadge) syncBadge.classList.add('syncing');
+      try {
+        const res = await fetch(`/api/jobs?user=${encodeURIComponent(user)}`);
+        if (!res.ok) throw new Error('API fetch failed');
+        const data = await res.json();
+        liveJobs = data.jobs || [];
+        liveClusters = data.clusters || [];
+        liveDependencies = data.dependencies || [];
+        liveCompletedJobs = data.completed_jobs || [];
+        syncMeadowWithSlurm(liveJobs, liveClusters, liveDependencies);
+        renderTelemetryDashboard();
+
+        const liveText = document.getElementById('live-sync-text');
+        if (liveText) {
+          const d = new Date();
+          const ts = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+          liveText.textContent = `LIVE • ${ts}`;
+        }
+      } catch (err) {
+        console.warn('Slurm API error:', err);
+      } finally {
+        if (syncBadge) setTimeout(() => syncBadge.classList.remove('syncing'), 350);
+      }
+    }
+
+    function syncMeadowWithSlurm(newJobs, clusters, deps) {
+      const existingMap = new Map(flowerEntities.map(f => [f.job.id, f]));
+      flowerEntities = newJobs.map(job => {
+        if (existingMap.has(job.id)) {
+          const f = existingMap.get(job.id);
+          f.job = job;
+          return f;
+        } else {
+          return new FlowerEntity(job);
+        }
+      });
+
+      // Filter tags inside floating Zen HUD - Single "All" option only as requested
+      const clusterBar = document.getElementById('cluster-bar');
+      if (clusterBar) {
+        clusterBar.innerHTML = `<div class="cluster-tag active" data-cluster="all">🌿 All (${newJobs.length})</div>`;
+        const allTag = clusterBar.querySelector('.cluster-tag');
+        if (allTag) {
+          allTag.addEventListener('click', () => {
+            activeFilter = 'all';
+            camera.hasUserMoved = false;
+            autoAdjustView(true);
+          });
+        }
+      }
+
+      renderTelemetryDashboard();
+      updateStats(deps);
+
+      // Auto-adjust view: Instant snap on first data load, smooth glide whenever workload layout shifts or if camera hasn't moved
+      const workloadKey = clusters.map(c => `${c.id}:${c.centerX}:${c.centerZ}:${c.count}`).join(';') + `|${newJobs.length}`;
+      const isFirstLoad = !window.__hasInitiallyAdjusted;
+      if (isFirstLoad) {
+        window.__hasInitiallyAdjusted = true;
+        autoAdjustView(false);
+      } else if (!camera.hasUserMoved || window.__lastWorkloadKey !== workloadKey) {
+        autoAdjustView(true);
+      }
+      window.__lastWorkloadKey = workloadKey;
+    }
+
+    function parseSlurmTime(timeStr) {
+      if (!timeStr || timeStr === 'None' || timeStr === 'INVALID' || timeStr === 'N/A' || timeStr === 'UNLIMITED') return 0;
+      let days = 0;
+      let rem = timeStr;
+      if (rem.includes('-')) {
+        const parts = rem.split('-');
+        days = parseInt(parts[0], 10) || 0;
+        rem = parts[1];
+      }
+      const t = rem.split(':');
+      if (t.length === 3) {
+        return days * 86400 + (parseInt(t[0], 10) || 0) * 3600 + (parseInt(t[1], 10) || 0) * 60 + (parseInt(t[2], 10) || 0);
+      } else if (t.length === 2) {
+        return days * 86400 + (parseInt(t[0], 10) || 0) * 60 + (parseInt(t[1], 10) || 0);
+      }
+      return 0;
+    }
+
+    function renderTelemetryDashboard() {
+      // 1. Render KPIs
+      const kpisEl = document.getElementById('telemetry-kpis');
+      if (kpisEl) {
+        const totalCount = liveJobs.length;
+        const runningCount = liveJobs.filter(j => j.status === 'RUNNING').length;
+        const queuedCount = liveJobs.filter(j => j.status !== 'RUNNING').length;
+        const activeNodesSet = new Set();
+        liveJobs.forEach(j => {
+          if (j.status === 'RUNNING' && j.node && !j.node.startsWith('Pending')) {
+            j.node.split(',').forEach(n => activeNodesSet.add(n.trim()));
+          }
+        });
+        const completedCount = liveCompletedJobs.length;
+
+        kpisEl.innerHTML = `
+          <div class="kpi-card">
+            <div class="kpi-icon" style="color: #38bdf8; background: rgba(56, 189, 248, 0.1);">📊</div>
+            <div class="kpi-info">
+              <span class="kpi-num">${totalCount}</span>
+              <span class="kpi-label">Active Workloads</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="color: #34d399; background: rgba(52, 211, 153, 0.1);">⚡</div>
+            <div class="kpi-info">
+              <span class="kpi-num" style="color: #34d399;">${runningCount}</span>
+              <span class="kpi-label">Running Live</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="color: #fbbf24; background: rgba(251, 191, 36, 0.1);">⏳</div>
+            <div class="kpi-info">
+              <span class="kpi-num" style="color: #fbbf24;">${queuedCount}</span>
+              <span class="kpi-label">Pending / Limits</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="color: #c084fc; background: rgba(192, 132, 252, 0.1);">🖥️</div>
+            <div class="kpi-info">
+              <span class="kpi-num" style="color: #c084fc;">${activeNodesSet.size}</span>
+              <span class="kpi-label">Active GPU Nodes</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="color: #10b981; background: rgba(16, 185, 129, 0.1);">🏁</div>
+            <div class="kpi-info">
+              <span class="kpi-num" style="color: #10b981;">${completedCount}</span>
+              <span class="kpi-label">Recently Finished</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // 2. Active Workloads Grid
+      const activeGrid = document.getElementById('telemetry-active-grid');
+      const activeCountBadge = document.getElementById('telemetry-active-count');
+      if (activeCountBadge) activeCountBadge.textContent = `${liveClusters.length} Clusters (${liveJobs.length} Jobs)`;
+
+      if (activeGrid) {
+        activeGrid.innerHTML = '';
+        if (liveClusters.length === 0) {
+          activeGrid.innerHTML = '<div style="color: #94a3b8; padding: 20px; font-size: 13px;">No active Slurm workloads currently running.</div>';
+        } else {
+          liveClusters.forEach(c => {
+            const card = document.createElement('div');
+            card.className = 'telemetry-card';
+            card.style.borderLeftColor = c.color;
+
+            const isSeed = c.is_seed;
+            const icon = isSeed ? '🌱' : (c.is_independent ? '🌻' : '🌸');
+            const timerId = `telem-timer-${c.id.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+            // Check if any job in cluster is running
+            const clusterJobs = liveJobs.filter(j => j.cluster === c.id);
+            const hasRunning = clusterJobs.some(j => j.status === 'RUNNING');
+            const statusClass = hasRunning ? 'status-running' : 'status-pending';
+            const statusText = hasRunning ? '🟢 RUNNING' : (isSeed ? '🌱 WAITING DEP' : '⏳ QUEUED');
+
+            // Elapsed progress %
+            const limitSec = parseSlurmTime(c.limit_str) || 86400;
+            const pct = Math.min(100, Math.round(((c.elapsed_sec || 0) / limitSec) * 100));
+
+            const nodesStr = c.nodes && c.nodes.length > 0 
+              ? c.nodes.join(', ') 
+              : (isSeed ? 'Dependency Queue' : (clusterJobs[0]?.node || 'Pending Allocation'));
+
+            card.innerHTML = `
+              <div class="telemetry-card-top">
+                <div class="telemetry-card-name">
+                  <span style="color: ${c.color}; font-size: 16px;">${icon}</span>
+                  <span>${c.name}</span>
+                  <span style="color: #64748b; font-size: 12px; font-weight: normal;">(${c.count} ${c.count === 1 ? 'job' : 'jobs'})</span>
+                </div>
+                <span class="telemetry-card-status ${statusClass}">${statusText}</span>
+              </div>
+
+              <div class="telemetry-card-meta">
+                <div class="meta-box">
+                  <span>Elapsed Time</span>
+                  <strong id="${timerId}" style="color: #38bdf8;">${formatSeconds(c.elapsed_sec)}</strong>
+                </div>
+                <div class="meta-box">
+                  <span>Slurm Limit</span>
+                  <strong>${c.limit_str || 'N/A'}</strong>
+                </div>
+                <div class="meta-box" style="grid-column: 1 / -1;">
+                  <span>Allocated Node(s)</span>
+                  <strong style="color: #a7f3d0;">🖥️ ${nodesStr}</strong>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px;">
+                <span>Walltime Progress</span>
+                <span style="color: #34d399; font-weight: 600;">${pct}%</span>
+              </div>
+              <div class="telemetry-progress-bar">
+                <div class="telemetry-progress-fill" style="width: ${pct}%;"></div>
+              </div>
+            `;
+            activeGrid.appendChild(card);
+          });
+        }
+      }
+
+      // 3. Recently Completed Jobs Table
+      const completedTbody = document.getElementById('telemetry-completed-tbody');
+      const completedCountBadge = document.getElementById('telemetry-completed-count');
+      if (completedCountBadge) completedCountBadge.textContent = `${liveCompletedJobs.length} Jobs Finished`;
+
+      if (completedTbody) {
+        completedTbody.innerHTML = '';
+        if (liveCompletedJobs.length === 0) {
+          completedTbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #94a3b8; padding: 24px;">No recently completed Slurm jobs found.</td></tr>';
+        } else {
+          liveCompletedJobs.forEach(job => {
+            const tr = document.createElement('tr');
+            
+            let stateClass = 'state-completed';
+            let stateIcon = '✅';
+            if (job.state === 'FAILED' || job.state === 'NODE_FAIL' || job.state === 'OUT_OF_MEMORY') {
+              stateClass = 'state-failed';
+              stateIcon = '❌';
+            } else if (job.state === 'CANCELLED') {
+              stateClass = 'state-cancelled';
+              stateIcon = '⚠️';
+            } else if (job.state === 'TIMEOUT') {
+              stateClass = 'state-timeout';
+              stateIcon = '⏱️';
+            }
+
+            tr.innerHTML = `
+              <td><span class="state-badge ${stateClass}">${stateIcon} ${job.state}</span></td>
+              <td style="font-family: 'JetBrains Mono', monospace; color: #38bdf8; font-weight: 600;">#${job.id}</td>
+              <td style="font-weight: 600; color: #f8fafc;">${job.name}</td>
+              <td style="font-family: 'JetBrains Mono', monospace; color: #fbbf24;">⏱️ ${job.elapsed}</td>
+              <td style="font-family: 'JetBrains Mono', monospace; color: #94a3b8;">🖥️ ${job.nodes}</td>
+              <td style="color: #94a3b8; font-size: 11px;">${job.start_time}</td>
+              <td style="color: #94a3b8; font-size: 11px;">${job.end_time}</td>
+              <td style="font-family: 'JetBrains Mono', monospace; color: ${job.exit_code === '0:0' ? '#34d399' : '#f87171'};">${job.exit_code}</td>
+            `;
+            completedTbody.appendChild(tr);
+          });
+        }
+      }
+    }
+
+    // Live continuous second-by-second timer ticking
+    setInterval(() => {
+      liveClusters.forEach(c => {
+        if (c.elapsed_sec > 0) {
+          c.elapsed_sec += 1;
+          const telemTimer = document.getElementById(`telem-timer-${c.id.replace(/[^a-zA-Z0-9]/g, '_')}`);
+          if (telemTimer) {
+            telemTimer.textContent = formatSeconds(c.elapsed_sec);
+          }
+        }
+      });
+      flowerEntities.forEach(f => {
+        if (f.job.status === 'RUNNING') {
+          f.job.elapsed += 1;
+        }
+      });
+    }, 1000);
+
+    function focusOnCluster(cluster) {
+      if (cluster && cluster.centerX !== undefined) {
+        camera.x = (width / 2) - cluster.centerX * camera.zoom;
+        camera.y = (height * 0.18) - cluster.centerZ * 0.65 * camera.zoom;
+      }
+    }
+
+    function updateStats(deps) {
+      const running = liveJobs.filter(j => j.status === 'RUNNING').length;
+      const pending = liveJobs.filter(j => j.status === 'PENDING').length;
+
+      document.getElementById('stat-running').textContent = running;
+      document.getElementById('stat-pending').textContent = pending;
+      document.getElementById('stat-deps').textContent = deps ? deps.length : 0;
+      const totalEl = document.getElementById('total-jobs');
+      if (totalEl) totalEl.textContent = liveJobs.length;
+    }
+
+    /* =========================================================================
+       2. CANVAS RENDERING ENGINE (SHINING STARS, OCCASIONAL COMETS, MOUNTAINS)
+       ========================================================================= */
+    const canvas = document.getElementById('meadow-canvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    // Universal roundRect Polyfill for cross-browser & older canvas support
+    if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        let radius = r || 0;
+        if (typeof radius === 'number') {
+          radius = [radius, radius, radius, radius];
+        } else if (!Array.isArray(radius)) {
+          radius = [0, 0, 0, 0];
+        }
+        const tl = Math.min(radius[0] || 0, w / 2, h / 2);
+        const tr = Math.min(radius[1] || 0, w / 2, h / 2);
+        const br = Math.min(radius[2] || 0, w / 2, h / 2);
+        const bl = Math.min(radius[3] || 0, w / 2, h / 2);
+
+        this.moveTo(x + tl, y);
+        this.lineTo(x + w - tr, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + tr);
+        this.lineTo(x + w, y + h - br);
+        this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+        this.lineTo(x + bl, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - bl);
+        this.lineTo(x, y + tl);
+        this.quadraticCurveTo(x, y, x + tl, y);
+        this.closePath();
+        return this;
+      };
+    }
+
+    // Safe cross-platform pill / rounded badge renderer
+    function drawPill(c, x, y, w, h, r, bg, stroke, lw = 0.8) {
+      c.save();
+      c.beginPath();
+      if (typeof c.roundRect === 'function') {
+        c.roundRect(x, y, w, h, r);
+      } else {
+        const radius = Math.min(r || 4, w / 2, h / 2);
+        c.moveTo(x + radius, y);
+        c.lineTo(x + w - radius, y);
+        c.quadraticCurveTo(x + w, y, x + w, y + radius);
+        c.lineTo(x + w, y + h - radius);
+        c.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        c.lineTo(x + radius, y + h);
+        c.quadraticCurveTo(x, y + h, x, y + h - radius);
+        c.lineTo(x, y + radius);
+        c.quadraticCurveTo(x, y, x + radius, y);
+        c.closePath();
+      }
+      if (bg) {
+        c.fillStyle = bg;
+        c.fill();
+      }
+      if (stroke) {
+        c.strokeStyle = stroke;
+        c.lineWidth = lw;
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    // Offscreen Canvas for static mountain night backdrop (pre-rendered once on resize, saving 90,000+ trig ops/sec!)
+    const staticBgCanvas = document.createElement('canvas');
+    const staticBgCtx = staticBgCanvas.getContext('2d');
+
+    function drawDistantPeaks(targetCtx, horizonY, amplitude, colorTop, colorBottom, freq, seed, hasSnow) {
+      targetCtx.beginPath();
+      targetCtx.moveTo(0, horizonY);
+      
+      const step = 8;
+      for (let x = 0; x <= width + step; x += step) {
+        const n1 = Math.sin((x + seed * 100) * freq);
+        const n2 = Math.sin((x + seed * 40) * freq * 2.1) * 0.4;
+        const n3 = Math.cos((x + seed * 75) * freq * 4.8) * 0.15;
+        const y = horizonY - (Math.abs(n1 + n2 + n3)) * amplitude;
+        targetCtx.lineTo(x, y);
+      }
+      targetCtx.lineTo(width, horizonY);
+      targetCtx.closePath();
+
+      const grad = targetCtx.createLinearGradient(0, horizonY - amplitude, 0, horizonY);
+      grad.addColorStop(0, colorTop);
+      grad.addColorStop(1, colorBottom);
+      targetCtx.fillStyle = grad;
+      targetCtx.fill();
+
+      if (hasSnow) {
+        targetCtx.strokeStyle = 'rgba(224, 242, 254, 0.2)';
+        targetCtx.lineWidth = 1.0;
+        targetCtx.stroke();
+      }
+    }
+
+    function buildStaticBackground() {
+      if (!width || !height) return;
+      staticBgCanvas.width = width;
+      staticBgCanvas.height = height;
+      const horizonY = height * 0.18;
+
+      // 1. Deep Obsidian to Moonlight Navy Sky (Panoramic 18% top rim)
+      const skyGrad = staticBgCtx.createLinearGradient(0, 0, 0, horizonY);
+      skyGrad.addColorStop(0, '#010309');
+      skyGrad.addColorStop(0.4, '#030814');
+      skyGrad.addColorStop(0.75, '#071424');
+      skyGrad.addColorStop(1, '#0c222e');
+      staticBgCtx.fillStyle = skyGrad;
+      staticBgCtx.fillRect(0, 0, width, horizonY);
+
+      // 2. Crescent Moon in Upper Panoramic Sky
+      const moonX = width * 0.88;
+      const moonY = Math.max(26, horizonY * 0.38);
+      
+      const moonGlow = staticBgCtx.createRadialGradient(moonX, moonY, 6, moonX, moonY, 80);
+      moonGlow.addColorStop(0, 'rgba(224, 242, 254, 0.28)');
+      moonGlow.addColorStop(0.5, 'rgba(186, 230, 253, 0.06)');
+      moonGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      staticBgCtx.fillStyle = moonGlow;
+      staticBgCtx.fillRect(moonX - 80, moonY - 80, 160, 160);
+
+      staticBgCtx.save();
+      staticBgCtx.beginPath();
+      staticBgCtx.arc(moonX, moonY, 13, 0, Math.PI * 2);
+      staticBgCtx.fillStyle = '#f8fafc';
+      staticBgCtx.shadowColor = '#e0f2fe';
+      staticBgCtx.shadowBlur = 12;
+      staticBgCtx.fill();
+      staticBgCtx.beginPath();
+      staticBgCtx.arc(moonX + 4.5, moonY - 2.5, 11.5, 0, Math.PI * 2);
+      staticBgCtx.fillStyle = '#030814';
+      staticBgCtx.shadowBlur = 0;
+      staticBgCtx.fill();
+      staticBgCtx.restore();
+
+      // 3. Panoramic Alpine Mountain Silhouettes (Backdrop for vast meadow)
+      drawDistantPeaks(staticBgCtx, horizonY, horizonY * 0.55, '#071220', '#040b15', 0.0035, 7, true);
+      drawDistantPeaks(staticBgCtx, horizonY, horizonY * 0.35, '#0a1d26', '#06131c', 0.0075, 21, false);
+
+      // 4. Expansive 82% Rolling Alpine Meadow Floor
+      const groundGrad = staticBgCtx.createLinearGradient(0, horizonY, 0, height);
+      groundGrad.addColorStop(0, '#0c261e');
+      groundGrad.addColorStop(0.2, '#081d17');
+      groundGrad.addColorStop(0.65, '#051410');
+      groundGrad.addColorStop(1, '#020907');
+      staticBgCtx.fillStyle = groundGrad;
+      staticBgCtx.fillRect(0, horizonY, width, height - horizonY);
+
+      // 5. Horizon Mist
+      const mistGrad = staticBgCtx.createLinearGradient(0, horizonY - 15, 0, horizonY + 20);
+      mistGrad.addColorStop(0, 'rgba(52, 211, 153, 0)');
+      mistGrad.addColorStop(0.5, 'rgba(52, 211, 153, 0.15)');
+      mistGrad.addColorStop(1, 'rgba(52, 211, 153, 0)');
+      staticBgCtx.fillStyle = mistGrad;
+      staticBgCtx.fillRect(0, horizonY - 15, width, 35);
+    }
+
+    let camera = {
+      x: 0,
+      y: 0,
+      zoom: 1.35,
+      targetX: 0,
+      targetY: 0,
+      targetZoom: 1.35,
+      isDragging: false,
+      hasUserMoved: false,
+      lastMouseX: 0,
+      lastMouseY: 0
+    };
+
+    /* Pure Dynamic Viewport Auto-Adjustment:
+       Calculates real bounding box of all active jobs, clusters, and seeds,
+       dynamically fitting zoom and translation to framing without fixed defaults. */
+    function autoAdjustView(smooth = true) {
+      if (!width || !height) return;
+      if ((!flowerEntities || flowerEntities.length === 0) && (!liveClusters || liveClusters.length === 0)) {
+        camera.targetX = width / 2;
+        camera.targetY = height * 0.45;
+        camera.targetZoom = width < 1100 ? 1.20 : 1.35;
+        if (!smooth) {
+          camera.x = camera.targetX;
+          camera.y = camera.targetY;
+          camera.zoom = camera.targetZoom;
+        }
+        return;
+      }
+
+      let minX = Infinity, maxX = -Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
+
+      flowerEntities.forEach(f => {
+        const jx = f.job.x;
+        const jz = f.job.z;
+        if (jx < minX) minX = jx;
+        if (jx > maxX) maxX = jx;
+        if (jz < minZ) minZ = jz;
+        if (jz > maxZ) maxZ = jz;
+      });
+
+      if (liveClusters && liveClusters.length > 0) {
+        liveClusters.forEach(c => {
+          const r = c.spreadRadius || 30;
+          if (c.centerX - r < minX) minX = c.centerX - r;
+          if (c.centerX + r > maxX) maxX = c.centerX + r;
+          if (c.centerZ - r < minZ) minZ = c.centerZ - r;
+          if (c.centerZ + r > maxZ) maxZ = c.centerZ + r;
+        });
+      }
+
+      if (!isFinite(minX) || !isFinite(maxX)) {
+        minX = -150; maxX = 150; minZ = 50; maxZ = 250;
+      }
+
+      // Generous breathing margins around flowers and fences
+      const padX = 85;
+      const padZ = 70;
+      const spanX = Math.max(200, (maxX - minX) + padX * 2);
+      const spanZ = Math.max(140, (maxZ - minZ) * 0.65 + padZ * 2);
+
+      const midX = (minX + maxX) / 2;
+      const midZ = (minZ + maxZ) / 2;
+
+      // Available screen space (stay below top HUD & mountain horizon, above bottom controls)
+      const topSafeZone = Math.max(55, height * 0.20);
+      const bottomSafeZone = 65;
+      const availWidth = width * 0.88;
+      const availHeight = Math.max(200, height - topSafeZone - bottomSafeZone);
+
+      const zoomX = availWidth / spanX;
+      const zoomY = availHeight / spanZ;
+
+      // Auto-fit zoom clamped between comfortable viewing limits
+      const idealZoom = Math.min(Math.max(Math.min(zoomX, zoomY), 0.50), 1.85);
+
+      const idealX = (width / 2) - (midX * idealZoom);
+      const targetMeadowCenterY = topSafeZone + (availHeight * 0.50);
+      const idealY = targetMeadowCenterY - (midZ * 0.65 * idealZoom);
+
+      camera.targetZoom = idealZoom;
+      camera.targetX = idealX;
+      camera.targetY = idealY;
+
+      if (!smooth) {
+        camera.x = idealX;
+        camera.y = idealY;
+        camera.zoom = idealZoom;
+      }
+    }
+
+    function resizeCanvas() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+
+      if (!camera.hasUserMoved) {
+        autoAdjustView(false);
+      }
+      buildStaticBackground();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 190 Radiant Shining Stars in the Panoramic Night Sky
+    const stars = Array.from({ length: 190 }, () => ({
+      x: Math.random() * 2600 - 300,
+      y: Math.random() * (window.innerHeight * 0.22),
+      radius: Math.random() * 1.8 + 0.5,
+      baseAlpha: Math.random() * 0.5 + 0.3,
+      twinklePhase: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.04 + 0.02,
+      isShining: Math.random() < 0.25,
+      color: ['#ffffff', '#e0f2fe', '#fef3c7', '#fed7aa', '#fbcfe8'][Math.floor(Math.random() * 5)]
+    }));
+
+    // Occasional Comet
+    let activeComet = null;
+    let nextCometTime = 100;
+
+    function updateAndDrawComet(ctx) {
+      if (!activeComet && timeTick >= nextCometTime) {
+        activeComet = {
+          x: Math.random() * (width * 0.6) + width * 0.2,
+          y: Math.random() * (camera.y * 0.3) + 20,
+          dx: -(Math.random() * 5 + 4),
+          dy: Math.random() * 3 + 2,
+          length: 90 + Math.random() * 60,
+          alpha: 1.0,
+          life: 0
+        };
+        nextCometTime = timeTick + Math.floor(Math.random() * 700 + 400);
+      }
+
+      if (activeComet) {
+        activeComet.x += activeComet.dx;
+        activeComet.y += activeComet.dy;
+        activeComet.life++;
+
+        if (activeComet.life > 45) {
+          activeComet.alpha -= 0.035;
+        }
+
+        if (activeComet.alpha <= 0 || activeComet.x < -100 || activeComet.y > (height * 0.22)) {
+          activeComet = null;
+          return;
+        }
+
+        ctx.save();
+        const angle = Math.atan2(activeComet.dy, activeComet.dx);
+        const tailX = activeComet.x - Math.cos(angle) * activeComet.length;
+        const tailY = activeComet.y - Math.sin(angle) * activeComet.length;
+
+        const cometGrad = ctx.createLinearGradient(activeComet.x, activeComet.y, tailX, tailY);
+        cometGrad.addColorStop(0, `rgba(255, 255, 255, ${activeComet.alpha})`);
+        cometGrad.addColorStop(0.3, `rgba(186, 230, 253, ${activeComet.alpha * 0.7})`);
+        cometGrad.addColorStop(1, 'rgba(186, 230, 253, 0)');
+
+        ctx.beginPath();
+        ctx.moveTo(activeComet.x, activeComet.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.strokeStyle = cometGrad;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.shadowColor = '#e0f2fe';
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(activeComet.x, activeComet.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    // Floral Wind: Glowing blossom petals swirling across the expansive meadow
+    const floralPetals = Array.from({ length: 85 }, () => ({
+      x: Math.random() * (window.innerWidth || 1920),
+      y: (window.innerHeight || 1080) * 0.18 + Math.random() * ((window.innerHeight || 1080) * 0.82),
+      size: Math.random() * 8 + 4.5,
+      speedX: -(Math.random() * 1.8 + 0.9),
+      speedY: Math.random() * 0.5 - 0.25,
+      rot: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.05,
+      color: ['#f472b6', '#fda4af', '#fbcfe8', '#fed7aa', '#38bdf8', '#c084fc', '#fef08a'][Math.floor(Math.random() * 7)],
+      alpha: Math.random() * 0.4 + 0.50,
+      swayPhase: Math.random() * Math.PI * 2
+    }));
+
+    function drawPhotorealisticMountainNight(ctx) {
+      // 1. Draw baked static backdrop in 1 instant blit
+      if (staticBgCanvas.width > 0) {
+        ctx.drawImage(staticBgCanvas, 0, 0);
+      }
+
+      const horizonY = height * 0.18;
+
+      // 2. Shining Radiant Stars (Twinkling & Flare animations)
+      stars.forEach(s => {
+        if (s.y > horizonY - 10) return;
+        const shimmer = (Math.sin(timeTick * s.twinkleSpeed + s.twinklePhase) + 1) * 0.5;
+        const currentAlpha = s.baseAlpha + shimmer * 0.45;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius * (0.8 + shimmer * 0.3), 0, Math.PI * 2);
+        ctx.fillStyle = s.color;
+        ctx.globalAlpha = Math.min(1.0, currentAlpha);
+        ctx.fill();
+
+        if (s.isShining && shimmer > 0.4) {
+          const flareLen = (s.radius * 3.5) * shimmer;
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth = 1.0;
+          ctx.globalAlpha = Math.min(1.0, Math.max(0, (shimmer - 0.4) * 0.9));
+          ctx.beginPath();
+          ctx.moveTo(s.x - flareLen, s.y); ctx.lineTo(s.x + flareLen, s.y);
+          ctx.moveTo(s.x, s.y - flareLen); ctx.lineTo(s.x, s.y + flareLen);
+          ctx.stroke();
+        }
+        ctx.restore();
+      });
+
+      // 3. Occasional Comet
+      updateAndDrawComet(ctx);
+    }
+
+    function drawFloralWind(ctx) {
+      const meadowTop = height * 0.18;
+      const meadowBottom = height + 40;
+
+      floralPetals.forEach(p => {
+        p.x += p.speedX * (breezeStrength * 0.75);
+        p.y += p.speedY + Math.sin(timeTick * 0.03 + p.swayPhase) * 0.75;
+        p.rot += p.rotSpeed * (0.8 + breezeStrength * 0.3);
+
+        // Smooth wrap-around across entire width and full meadow height
+        if (p.x < -40) {
+          p.x = width + 40;
+          p.y = meadowTop + Math.random() * (height - meadowTop);
+          p.speedX = -(Math.random() * 1.8 + 0.9);
+        }
+        if (p.y > meadowBottom) {
+          p.y = meadowTop + Math.random() * 30;
+          p.x = Math.random() * (width + 60);
+        }
+        if (p.y < meadowTop - 20) {
+          p.y = meadowTop + 10;
+        }
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+
+        // Organic blossom petal contour
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.size, p.size * 0.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 8;
+        ctx.fill();
+
+        // Delicate starlight sheen on inner petal curve
+        ctx.beginPath();
+        ctx.ellipse(-p.size * 0.15, 0, p.size * 0.5, p.size * 0.22, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = p.alpha * 0.45;
+        ctx.shadowBlur = 0;
+        ctx.fill();
+
+        ctx.restore();
+      });
+    }
+
+    /* =========================================================================
+       3. BOTANICAL FLOWER & SEED ENTITIES (WITH FLORAL WIND SWAY)
+       ========================================================================= */
+    class FlowerEntity {
+      constructor(job) {
+        this.job = job;
+        this.stemHeight = 0;
+        this.targetStemHeight = this.calculateStemHeight();
+        this.bloomScale = 0;
+        this.petalAngleOffset = Math.random() * Math.PI * 2;
+        this.swaySeed = Math.random() * 100;
+        this.radius = 24;
+      }
+
+      calculateStemHeight() {
+        if (this.job.status === 'PENDING') return 58; // Submitted/Queued jobs stand tall with an elegant stem
+        const maxStem = 125;
+        const elapsed = Number(this.job.elapsed) || 0;
+        const walltime = Math.max(1, Number(this.job.walltime) || 3600);
+        const progress = Math.min(1.0, elapsed / walltime);
+        return 62 + progress * (maxStem - 62);
+      }
+
+      update() {
+        this.targetStemHeight = this.calculateStemHeight();
+        if (this.stemHeight === 0) {
+          this.stemHeight = this.targetStemHeight;
+        } else {
+          this.stemHeight += (this.targetStemHeight - this.stemHeight) * 0.08;
+        }
+        const targetBloom = this.job.status === 'PENDING' ? 0.92 : 1.0;
+        if (this.bloomScale === 0) {
+          this.bloomScale = targetBloom;
+        } else {
+          this.bloomScale += (targetBloom - this.bloomScale) * 0.08;
+        }
+      }
+
+      draw(ctx, screenX, groundY, isHovered, isDimmed) {
+        const windWave = Math.sin(timeTick * 0.025 * breezeStrength + this.swaySeed);
+        const sway = windWave * (this.stemHeight * 0.08 * (breezeStrength * 0.45));
+        const headX = screenX + sway;
+        const headY = groundY - this.stemHeight * camera.zoom;
+
+        ctx.save();
+        if (isDimmed) {
+          ctx.globalAlpha = 0.12;
+        }
+
+        if (this.job.is_seed) {
+          // NATURAL BOTANICAL SEED POD WITH SPROUT & DEWDROP
+          this.drawSeedPod(ctx, screenX, groundY, isHovered);
+        } else {
+          // TAPERED BOTANICAL STEM WITH NATURAL GRADIENT
+          const stemGrad = ctx.createLinearGradient(screenX, groundY, headX, headY);
+          stemGrad.addColorStop(0, '#0f3822');
+          stemGrad.addColorStop(0.35, '#166534');
+          stemGrad.addColorStop(0.8, '#22c55e');
+          stemGrad.addColorStop(1, '#86efac');
+
+          ctx.beginPath();
+          ctx.moveTo(screenX, groundY);
+          ctx.quadraticCurveTo(screenX + sway * 0.35, groundY - (this.stemHeight * 0.5 * camera.zoom), headX, headY);
+          ctx.lineWidth = Math.max(3.0, 4.6 * camera.zoom);
+          ctx.strokeStyle = this.job.status === 'FAILED' ? '#64748b' : stemGrad;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+
+          // Calyx Sepals (small green leaves cradling the base of the flower head)
+          ctx.save();
+          ctx.translate(headX, headY);
+          for (let s = -1; s <= 1; s++) {
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.quadraticCurveTo(s * 5 * camera.zoom, 4 * camera.zoom, s * 7 * camera.zoom, 8 * camera.zoom);
+            ctx.strokeStyle = '#15803d';
+            ctx.lineWidth = 1.6 * camera.zoom;
+            ctx.stroke();
+          }
+          ctx.restore();
+
+          // Alternating Organic Botanical Leaves with midrib vein
+          if (this.stemHeight > 35) {
+            this.drawLeaf(ctx, screenX + sway * 0.2, groundY - (this.stemHeight * 0.38 * camera.zoom), -0.55, 16 * camera.zoom);
+            if (this.stemHeight > 65) {
+              this.drawLeaf(ctx, screenX + sway * 0.3, groundY - (this.stemHeight * 0.65 * camera.zoom), 0.55, 13 * camera.zoom);
+            }
+          }
+
+          // Flower Head Bloom (Organic multi-layer corolla & glowing stamens)
+          this.drawFlowerHead(ctx, headX, headY, isHovered);
+
+          // Soft Earth Root Shadow
+          ctx.beginPath();
+          ctx.ellipse(screenX, groundY, 15 * camera.zoom, 5.0 * camera.zoom, 0, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(2, 8, 6, 0.65)';
+          ctx.fill();
+        }
+
+        ctx.restore();
+
+        this.screenHeadX = this.job.is_seed ? screenX : headX;
+        this.screenHeadY = this.job.is_seed ? groundY - 10 : headY;
+      }
+
+      drawLeaf(ctx, x, y, angle, size) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+
+        // Organic Leaf Blade
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(size * 0.45, -size * 0.35, size, 0);
+        ctx.quadraticCurveTo(size * 0.45, size * 0.35, 0, 0);
+        const leafGrad = ctx.createLinearGradient(0, -size * 0.35, size, size * 0.35);
+        leafGrad.addColorStop(0, '#15803d');
+        leafGrad.addColorStop(1, '#22c55e');
+        ctx.fillStyle = leafGrad;
+        ctx.fill();
+
+        // Leaf Central Midrib Vein
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(size * 0.5, 0, size * 0.88, 0);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      drawSeedPod(ctx, x, y, isHovered) {
+        ctx.save();
+        ctx.translate(x, y);
+        const pulse = 1.0 + 0.12 * Math.sin(timeTick * 0.04 + this.swaySeed);
+        const sRadius = (isHovered ? 13.5 : 10.5) * pulse * camera.zoom;
+
+        // 1. Soft nocturnal earth glow
+        ctx.beginPath();
+        ctx.arc(0, -6, sRadius * 2.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
+        ctx.fill();
+
+        // 2. Acorn / Lotus Seed Cupule (Wooden textured base cap)
+        ctx.beginPath();
+        ctx.ellipse(0, -2, sRadius * 0.85, sRadius * 0.45, 0, 0, Math.PI);
+        const cupGrad = ctx.createLinearGradient(-sRadius * 0.8, -2, sRadius * 0.8, 2);
+        cupGrad.addColorStop(0, '#78350f');
+        cupGrad.addColorStop(0.5, '#92400e');
+        cupGrad.addColorStop(1, '#451a03');
+        ctx.fillStyle = cupGrad;
+        ctx.fill();
+
+        // 3. Golden Kernel Body
+        ctx.beginPath();
+        ctx.ellipse(0, -8, sRadius * 0.72, sRadius * 0.95, 0, 0, Math.PI * 2);
+        const bodyGrad = ctx.createRadialGradient(-sRadius * 0.2, -10, sRadius * 0.1, 0, -8, sRadius);
+        bodyGrad.addColorStop(0, '#fef08a');
+        bodyGrad.addColorStop(0.4, '#f59e0b');
+        bodyGrad.addColorStop(1, '#b45309');
+        ctx.fillStyle = bodyGrad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(254, 240, 138, 0.45)';
+        ctx.lineWidth = 1.0;
+        ctx.stroke();
+
+        // 4. Emerging Tender Sprout Tendril with Dewdrop
+        ctx.beginPath();
+        ctx.moveTo(0, -8 - sRadius * 0.8);
+        ctx.bezierCurveTo(2, -8 - sRadius * 1.3, -4, -8 - sRadius * 1.6, 3, -8 - sRadius * 2.0);
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 2.2 * camera.zoom;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Moonlit Dewdrop at sprout tip
+        ctx.beginPath();
+        ctx.arc(3.5, -8 - sRadius * 2.0, 2.0 * camera.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = '#e0f2fe';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 6;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Elegant Seed Label with backing pill
+        const seedLabelY = 18 * camera.zoom;
+        const seedTitle = `🌱 ${this.job.name}`;
+        ctx.font = '600 11px "Outfit", sans-serif';
+        ctx.textAlign = 'center';
+        const stMetrics = ctx.measureText(seedTitle);
+        const stPillW = stMetrics.width + 12;
+        drawPill(ctx, -stPillW / 2, seedLabelY - 10, stPillW, 14, 4, 'rgba(15, 23, 42, 0.88)', 'rgba(251, 191, 36, 0.4)', 0.6);
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText(seedTitle, 0, seedLabelY);
+
+        // Seed status pill
+        const seedSubY = seedLabelY + 16;
+        const seedText = '🌱 Waiting Dependency';
+        ctx.font = '500 10px "JetBrains Mono", monospace';
+        const sMetrics = ctx.measureText(seedText);
+        const sPillW = sMetrics.width + 12;
+        drawPill(ctx, -sPillW / 2, seedSubY - 9, sPillW, 13, 4, 'rgba(120, 53, 15, 0.90)', '#fbbf24', 0.8);
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText(seedText, 0, seedSubY);
+
+        ctx.restore();
+      }
+
+      drawFlowerHead(ctx, x, y, isHovered) {
+        const petals = this.job.petals || 6;
+        const radius = (isHovered ? 29 : 22) * this.bloomScale * camera.zoom;
+        const baseColor = this.job.color || '#ec4899';
+        const isRunning = this.job.status === 'RUNNING';
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // 1. Nocturnal Bioluminescent Aura:
+        // - Radiant Golden/Emerald Aura for Running jobs
+        // - Luminous Moonlit Cyan/Starlight Pulse for Submitted/Pending jobs (e.g. AssocGrpNodeLimit)
+        const auraAlpha = isHovered ? 0.50 : (isRunning 
+          ? (0.22 + 0.08 * Math.sin(timeTick * 0.04 + this.swaySeed))
+          : (0.18 + 0.06 * Math.sin(timeTick * 0.03 + this.swaySeed)));
+        const auraRad = radius * 2.2;
+        const auraGrad = ctx.createRadialGradient(0, 0, radius * 0.35, 0, 0, auraRad);
+
+        if (isRunning) {
+          auraGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+          auraGrad.addColorStop(0.45, isHovered ? 'rgba(244, 114, 182, 0.35)' : 'rgba(52, 211, 153, 0.22)');
+          auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        } else {
+          // Submitted/Queued: Luminous moonlit cyan-starlight expectant glow
+          auraGrad.addColorStop(0, 'rgba(224, 242, 254, 0.38)');
+          auraGrad.addColorStop(0.45, 'rgba(56, 189, 248, 0.20)');
+          auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        }
+
+        ctx.beginPath();
+        ctx.arc(0, 0, auraRad, 0, Math.PI * 2);
+        ctx.fillStyle = auraGrad;
+        ctx.fill();
+
+        // 2. LAYER 1: OUTER COROLLA (Deeper, slightly larger petals providing true 3D botanical depth)
+        const outerPetals = petals;
+        const outerLen = radius * 1.05;
+        const outerWid = radius * 0.52;
+        for (let i = 0; i < outerPetals; i++) {
+          const angle = (i * (Math.PI * 2) / outerPetals) + this.petalAngleOffset;
+          ctx.save();
+          ctx.rotate(angle);
+
+          // Organic petal contour with natural curve
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(-outerWid * 0.5, outerLen * 0.3, -outerWid * 0.85, outerLen * 0.75, -outerWid * 0.2, outerLen);
+          // Delicate petal tip notch
+          ctx.quadraticCurveTo(0, outerLen * 0.94, outerWid * 0.2, outerLen);
+          ctx.bezierCurveTo(outerWid * 0.85, outerLen * 0.75, outerWid * 0.5, outerLen * 0.3, 0, 0);
+          ctx.closePath();
+
+          // Velvet petal gradient
+          const pGrad = ctx.createLinearGradient(0, 0, 0, outerLen);
+          pGrad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+          pGrad.addColorStop(0.35, baseColor);
+          pGrad.addColorStop(1, '#ffffff'); // moonlit tip highlight
+          ctx.fillStyle = pGrad;
+          ctx.globalAlpha = 0.90;
+          ctx.fill();
+
+          // Subtle central petal vein
+          ctx.beginPath();
+          ctx.moveTo(0, outerLen * 0.15);
+          ctx.quadraticCurveTo(0, outerLen * 0.5, 0, outerLen * 0.82);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+          ctx.lineWidth = 0.9 * camera.zoom;
+          ctx.stroke();
+
+          ctx.restore();
+        }
+
+        // 3. LAYER 2: INNER COROLLA (Slightly rotated, brighter, delicate velvety inner petals)
+        const innerLen = radius * 0.82;
+        const innerWid = radius * 0.42;
+        const innerOffset = (Math.PI / outerPetals);
+        for (let i = 0; i < outerPetals; i++) {
+          const angle = (i * (Math.PI * 2) / outerPetals) + this.petalAngleOffset + innerOffset;
+          ctx.save();
+          ctx.rotate(angle);
+
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(-innerWid * 0.45, innerLen * 0.3, -innerWid * 0.8, innerLen * 0.75, 0, innerLen);
+          ctx.bezierCurveTo(innerWid * 0.8, innerLen * 0.75, innerWid * 0.45, innerLen * 0.3, 0, 0);
+          ctx.closePath();
+
+          const iGrad = ctx.createLinearGradient(0, 0, 0, innerLen);
+          iGrad.addColorStop(0, '#ffffff');
+          iGrad.addColorStop(0.45, baseColor);
+          iGrad.addColorStop(1, '#fff1f2');
+          ctx.fillStyle = iGrad;
+          ctx.globalAlpha = 0.94;
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        // 4. REALISTIC FLORAL RECEPTACLE & STAMENS
+        const centerR = radius * 0.28;
+
+        // Receptacle disc
+        ctx.beginPath();
+        ctx.arc(0, 0, centerR, 0, Math.PI * 2);
+        const discGrad = ctx.createRadialGradient(0, 0, centerR * 0.2, 0, 0, centerR);
+        discGrad.addColorStop(0, '#78350f');
+        discGrad.addColorStop(0.65, '#b45309');
+        discGrad.addColorStop(1, '#f59e0b');
+        ctx.fillStyle = discGrad;
+        ctx.globalAlpha = 1.0;
+        ctx.fill();
+
+        // Radiating stamen filaments with glowing pollen anthers
+        const stamenCount = 8;
+        for (let s = 0; s < stamenCount; s++) {
+          const sAngle = s * (Math.PI * 2 / stamenCount) + (timeTick * 0.005);
+          const stamenLen = centerR * 1.5;
+          const sx = Math.cos(sAngle) * stamenLen;
+          const sy = Math.sin(sAngle) * stamenLen;
+
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(sAngle) * (centerR * 0.4), Math.sin(sAngle) * (centerR * 0.4));
+          ctx.lineTo(sx, sy);
+          ctx.strokeStyle = 'rgba(254, 240, 138, 0.7)';
+          ctx.lineWidth = 0.8 * camera.zoom;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(sx, sy, 1.2 * camera.zoom, 0, Math.PI * 2);
+          ctx.fillStyle = '#fef08a';
+          ctx.shadowColor = '#fef08a';
+          ctx.shadowBlur = 4;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        // Core Pistil button
+        ctx.beginPath();
+        ctx.arc(0, 0, centerR * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = '#451a03';
+        ctx.fill();
+
+        // 5. BOTANICAL SPECIMEN BADGE & LABELS (Always visible, clean, readable)
+        const labelY = radius + 14 * camera.zoom;
+        const icon = isRunning ? '🌸' : (this.job.is_seed ? '🌱' : '🌷');
+        const nameText = `${icon} ${this.job.name}`;
+        
+        ctx.font = '600 11px "Outfit", sans-serif';
+        ctx.textAlign = 'center';
+        const nMetrics = ctx.measureText(nameText);
+        const nPillW = nMetrics.width + 14;
+        
+        // Clean backing pill for specimen title
+        drawPill(ctx, -nPillW / 2, labelY - 11, nPillW, 15, 4, 'rgba(15, 23, 42, 0.88)', 'rgba(255, 255, 255, 0.25)', 0.6);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(nameText, 0, labelY);
+
+        // Status Subtitle Pill
+        const subY = labelY + 16;
+        let subText = '';
+        let subColor = '#94a3b8';
+        let bgPill = 'rgba(15, 23, 42, 0.85)';
+
+        if (isRunning) {
+          subText = `🟢 ${this.job.node || 'Running'}`;
+          subColor = '#34d399';
+          bgPill = 'rgba(6, 78, 59, 0.85)';
+        } else if (this.job.node && this.job.node.includes('AssocGrpNodeLimit')) {
+          subText = '⏳ AssocGrpNodeLimit';
+          subColor = '#38bdf8';
+          bgPill = 'rgba(12, 74, 110, 0.85)';
+        } else if (this.job.node && this.job.node.includes('Dependency')) {
+          subText = '🌱 Waiting Dependency';
+          subColor = '#fbbf24';
+          bgPill = 'rgba(120, 53, 15, 0.85)';
+        } else {
+          subText = `⏳ ${this.job.node || 'Submitted'}`;
+          subColor = '#cbd5e1';
+          bgPill = 'rgba(30, 41, 59, 0.85)';
+        }
+
+        ctx.font = '500 10px "JetBrains Mono", monospace';
+        const metrics = ctx.measureText(subText);
+        const pillW = metrics.width + 12;
+        const pillH = 14;
+
+        drawPill(ctx, -pillW / 2, subY - 10, pillW, pillH, 4, bgPill, subColor, 0.8);
+
+        ctx.fillStyle = subColor;
+        ctx.shadowBlur = 0;
+        ctx.fillText(subText, 0, subY);
+
+        ctx.restore();
+      }
+    }
+
+    /* Terraced Flower Bed Enclosures with Authentic Rustic Wooden Fences */
+    function drawClusterBeds(ctx) {
+      if (!highlightBeds) return;
+      liveClusters.forEach(c => {
+        // Skip seeds - explicitly no fences or circles for seeds!
+        if (c.is_seed) return;
+
+        const screenCenterX = camera.x + c.centerX * camera.zoom;
+        const screenCenterZ = camera.y + c.centerZ * 0.65 * camera.zoom;
+        const isDimmed = activeFilter !== 'all' && activeFilter !== c.id;
+
+        ctx.save();
+        if (isDimmed) ctx.globalAlpha = 0.12;
+
+        const isIndep = c.is_independent || c.count === 1;
+        const spreadR = c.spreadRadius || (isIndep ? 42 : 110);
+        const radX = (spreadR + 18) * camera.zoom;
+        const radZ = (spreadR * 0.45 + 10) * camera.zoom;
+
+        // 1. Lush Garden Earth Turf (Inside the fence)
+        ctx.beginPath();
+        ctx.ellipse(screenCenterX, screenCenterZ, radX, radZ, 0, 0, Math.PI * 2);
+        ctx.fillStyle = isIndep ? 'rgba(12, 38, 28, 0.65)' : 'rgba(10, 34, 24, 0.65)';
+        ctx.fill();
+
+        // Soft earth shadow outside the fence
+        ctx.beginPath();
+        ctx.ellipse(screenCenterX, screenCenterZ + 3 * camera.zoom, radX + 6 * camera.zoom, radZ + 3 * camera.zoom, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(2, 8, 6, 0.35)';
+        ctx.fill();
+
+        // 2. RUSTIC WOODEN FENCE (Dynamically auto-sized to cluster spread)
+        const postCount = Math.max(10, Math.min(32, Math.round(spreadR * 0.32)));
+        const postH = (isIndep ? 16 : 22) * camera.zoom;
+        const postW = 3.6 * camera.zoom;
+        const posts = [];
+
+        for (let i = 0; i < postCount; i++) {
+          const angle = (i * Math.PI * 2 / postCount);
+          const px = screenCenterX + Math.cos(angle) * radX;
+          const py = screenCenterZ + Math.sin(angle) * radZ;
+          posts.push({ x: px, y: py, angle: angle });
+        }
+
+        // A. Connecting Wooden Rails
+        for (let i = 0; i < postCount; i++) {
+          const nextIdx = (i + 1) % postCount;
+          const p1 = posts[i];
+          const p2 = posts[nextIdx];
+
+          // Leave an open garden water gate at the bottom where the brook flows out!
+          const midAngle = (p1.angle + p2.angle) / 2;
+          const isWaterGate = (!isIndep && Math.abs(midAngle - Math.PI / 2) < 0.28);
+          if (isWaterGate) continue; // Open gateway for water brook!
+
+          // Lower Rail
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y - postH * 0.35);
+          ctx.lineTo(p2.x, p2.y - postH * 0.35);
+          ctx.strokeStyle = '#5c2c10';
+          ctx.lineWidth = 2.4 * camera.zoom;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+
+          // Upper Rail
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y - postH * 0.75);
+          ctx.lineTo(p2.x, p2.y - postH * 0.75);
+          ctx.strokeStyle = '#78350f';
+          ctx.lineWidth = 2.6 * camera.zoom;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+
+          // Rail Moonlit Highlight
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y - postH * 0.75 - 1);
+          ctx.lineTo(p2.x, p2.y - postH * 0.75 - 1);
+          ctx.strokeStyle = '#b45309';
+          ctx.lineWidth = 1.0 * camera.zoom;
+          ctx.stroke();
+        }
+
+        // B. Vertical Wooden Picket Posts (Pointed tips & wood grain)
+        posts.forEach(p => {
+          // Post contact shadow at soil base
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y + 1, postW * 1.2, postW * 0.5, 0, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(2, 10, 6, 0.75)';
+          ctx.fill();
+
+          // Wooden Picket Post Body
+          const pGrad = ctx.createLinearGradient(p.x - postW / 2, 0, p.x + postW / 2, 0);
+          pGrad.addColorStop(0, '#b45309'); // warm lit edge
+          pGrad.addColorStop(0.35, '#92400e'); // cedar wood body
+          pGrad.addColorStop(1, '#451a03'); // shadowed edge
+
+          ctx.beginPath();
+          ctx.moveTo(p.x - postW / 2, p.y);
+          ctx.lineTo(p.x - postW / 2, p.y - postH + 4 * camera.zoom);
+          ctx.lineTo(p.x, p.y - postH); // Pointed picket tip
+          ctx.lineTo(p.x + postW / 2, p.y - postH + 4 * camera.zoom);
+          ctx.lineTo(p.x + postW / 2, p.y);
+          ctx.closePath();
+          ctx.fillStyle = pGrad;
+          ctx.fill();
+
+          // Iron nail dot on upper rail intersection
+          ctx.beginPath();
+          ctx.arc(p.x, p.y - postH * 0.75, 1.0 * camera.zoom, 0, Math.PI * 2);
+          ctx.fillStyle = '#1e293b';
+          ctx.fill();
+        });
+
+        // 3. Cluster field label (Only for multi-job clusters: independent 1-flower beds are cleanly identified by their flower badge alone)
+        if (!isIndep && c.count > 1) {
+          ctx.font = '600 12px "Outfit", sans-serif';
+          const clusterText = `🌸 Cluster: ${c.name} (${c.count}) • ${formatSeconds(c.elapsed_sec)}`;
+          const cMetrics = ctx.measureText(clusterText);
+          const cPillW = cMetrics.width + 16;
+          drawPill(ctx, screenCenterX - cPillW / 2, screenCenterZ + radZ + 14 * camera.zoom, cPillW, 20, 5, 'rgba(15, 23, 42, 0.88)', c.color || '#ec4899', 0.8);
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(clusterText, screenCenterX, screenCenterZ + radZ + 28 * camera.zoom);
+
+          // Compute nodes if toggled
+          if (showNodeLabels && c.nodes && c.nodes.length > 0) {
+            ctx.font = '11px "JetBrains Mono", monospace';
+            ctx.fillStyle = '#94a3b8';
+            const nodesStr = c.nodes.length > 4 
+              ? `${c.nodes.slice(0, 3).join(', ')} +${c.nodes.length - 3} nodes`
+              : c.nodes.join(', ');
+            ctx.fillText(`🖥️ ${nodesStr}`, screenCenterX, screenCenterZ + radZ + 44 * camera.zoom);
+          }
+        }
+
+        ctx.restore();
+      });
+    }
+
+    /* =========================================================================
+       4. WATER FLOW CONNECTION THROUGH THE BOTTOM OF CLUSTER / PARENTS TO SEEDS
+       (Calm, serene glassy mountain stream originating directly from parent flowers or cluster gate,
+        nourishing seeds with crystal pools and gentle ripples)
+       ========================================================================= */
+    function drawSeedConnections(ctx) {
+      if (!showSeeds) return;
+      const seedFlowers = flowerEntities.filter(f => f.job.is_seed);
+      if (seedFlowers.length === 0) return;
+
+      const mainCluster = liveClusters.find(c => c.is_cluster || c.count > 1 || c.name.includes("resume"));
+
+      ctx.save();
+
+      seedFlowers.forEach((seedFlower, idx) => {
+        const endX = camera.x + (seedFlower.job.x * camera.zoom);
+        const endY = camera.y + (seedFlower.job.z * 0.65 * camera.zoom);
+
+        // Find parent flower entity from dependencies if present
+        let parentFlower = null;
+        if (seedFlower.job.parents && seedFlower.job.parents.length > 0) {
+          parentFlower = flowerEntities.find(f => seedFlower.job.parents.includes(f.job.id));
+        }
+
+        let startX, startY;
+        if (parentFlower) {
+          startX = camera.x + (parentFlower.job.x * camera.zoom);
+          startY = camera.y + (parentFlower.job.z * 0.65 * camera.zoom);
+        } else if (mainCluster) {
+          startX = camera.x + mainCluster.centerX * camera.zoom;
+          startY = camera.y + mainCluster.centerZ * 0.65 * camera.zoom + 52 * camera.zoom;
+        } else {
+          startX = endX;
+          startY = endY - 65 * camera.zoom;
+        }
+
+        // Central Spring Basin Pool at stream source
+        ctx.beginPath();
+        ctx.ellipse(startX, startY, 18 * camera.zoom, 6 * camera.zoom, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Path originating from parent to seed
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+
+        const midX = (startX + endX) / 2 + (Math.sin(timeTick * 0.015 + idx) * 6 * camera.zoom);
+        const midY = (startY + endY) / 2;
+        ctx.quadraticCurveTo(midX, midY, endX, endY);
+
+        // Layer 1: Broad soft water channel
+        ctx.strokeStyle = 'rgba(14, 165, 233, 0.24)';
+        ctx.lineWidth = 7.0 * camera.zoom;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Layer 2: Clear aquamarine brook stream (calm, tranquil)
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.52)';
+        ctx.lineWidth = 2.8 * camera.zoom;
+        ctx.stroke();
+
+        // Layer 3: Glassy surface reflection
+        ctx.strokeStyle = 'rgba(224, 242, 254, 0.72)';
+        ctx.lineWidth = 1.1 * camera.zoom;
+        ctx.stroke();
+
+        // Tranquil water pool around each independent seed
+        ctx.beginPath();
+        ctx.ellipse(endX, endY, 16 * camera.zoom, 5.5 * camera.zoom, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Subtle gentle breathing ripple (calm, serene)
+        const rippleR = (16 + Math.sin(timeTick * 0.025 + idx) * 2.5) * camera.zoom;
+        ctx.beginPath();
+        ctx.ellipse(endX, endY, rippleR, rippleR * 0.36, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.32)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      });
+
+      ctx.restore();
+    }
+
+    /* =========================================================================
+       5. MAIN ANIMATION LOOP
+       ========================================================================= */
+    function render() {
+      try {
+        timeTick++;
+        ctx.clearRect(0, 0, width, height);
+
+        // Smooth auto-adjust camera gliding
+        if (!camera.isDragging && !camera.hasUserMoved) {
+          camera.x += (camera.targetX - camera.x) * 0.08;
+          camera.y += (camera.targetY - camera.y) * 0.08;
+          camera.zoom += (camera.targetZoom - camera.zoom) * 0.08;
+        }
+
+        // 1. Natural Mountain Night Sky (Strictly above midway horizon, with shining stars & occasional comet)
+        drawPhotorealisticMountainNight(ctx);
+
+        // 2. Terraced Flower Bed Rings on Meadow (Differentiates Clusters vs Independent Jobs, Zero for seeds)
+        drawClusterBeds(ctx);
+
+        // 3. Draw Water Stream from bottom of cluster to seeds (Rests on meadow ground under flowers)
+        drawSeedConnections(ctx);
+
+        // 4. Stable depth sort flowers & seeds
+        flowerEntities.sort((a, b) => (a.job.z - b.job.z) || String(a.job.id).localeCompare(String(b.job.id)));
+
+        // 5. Render Flowers & Seed Pods (With floral wind sway & viewport culling)
+        flowerEntities.forEach(f => {
+          try {
+            f.update();
+            const groundY = camera.y + (f.job.z * 0.65 * camera.zoom);
+            const screenX = camera.x + (f.job.x * camera.zoom);
+
+            // Relaxed Viewport Culling: Skip blooms only if far outside screen boundaries
+            if (screenX < -400 || screenX > width + 400 || groundY < -400 || groundY > height + 400) {
+              return;
+            }
+
+            const isHovered = hoveredJob === f;
+            const isDimmed = activeFilter !== 'all' && f.job.cluster !== activeFilter;
+
+            f.draw(ctx, screenX, groundY, isHovered, isDimmed);
+          } catch (entityErr) {
+            console.error('Error drawing flower entity:', entityErr, f);
+          }
+        });
+
+        // 6. Draw Floral Wind Petals drifting across the meadow
+        drawFloralWind(ctx);
+      } catch (err) {
+        console.error('Meadow render loop error:', err);
+      } finally {
+        requestAnimationFrame(render);
+      }
+    }
+    requestAnimationFrame(render);
+
+    /* =========================================================================
+       6. INTERACTION & CONTROLS
+       ========================================================================= */
+    const tooltip = document.getElementById('job-tooltip');
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (camera.isDragging) {
+        camera.x += e.clientX - camera.lastMouseX;
+        camera.y += e.clientY - camera.lastMouseY;
+        camera.lastMouseX = e.clientX;
+        camera.lastMouseY = e.clientY;
+        return;
+      }
+
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      let found = null;
+
+      for (let f of flowerEntities) {
+        if (!f.screenHeadX) continue;
+        const dx = mouseX - f.screenHeadX;
+        const dy = mouseY - f.screenHeadY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < f.radius * camera.zoom * 1.6) {
+          found = f;
+          break;
+        }
+      }
+
+      hoveredJob = found;
+      if (found) {
+        showTooltip(found, e.clientX, e.clientY);
+      } else {
+        tooltip.style.display = 'none';
+      }
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      camera.isDragging = true;
+      camera.hasUserMoved = true;
+      camera.lastMouseX = e.clientX;
+      camera.lastMouseY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', () => {
+      camera.isDragging = false;
+    });
+
+    // Mobile & Tablet Touch Support
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        camera.isDragging = true;
+        camera.hasUserMoved = true;
+        camera.lastMouseX = e.touches[0].clientX;
+        camera.lastMouseY = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (camera.isDragging && e.touches.length === 1) {
+        camera.x += e.touches[0].clientX - camera.lastMouseX;
+        camera.y += e.touches[0].clientY - camera.lastMouseY;
+        camera.lastMouseX = e.touches[0].clientX;
+        camera.lastMouseY = e.touches[0].clientY;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+      camera.isDragging = false;
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+      camera.zoom = Math.max(0.4, Math.min(2.0, camera.zoom * zoomFactor));
+    }, { passive: false });
+
+    function showTooltip(flower, mouseX, mouseY) {
+      const j = flower.job;
+      document.getElementById('tt-id').textContent = `#${j.id}`;
+      const statusEl = document.getElementById('tt-status');
+      statusEl.textContent = j.status;
+      statusEl.className = `tooltip-status status-${j.status.toLowerCase()}`;
+
+      document.getElementById('tt-name').textContent = j.name;
+      document.getElementById('tt-cluster').textContent = j.cluster;
+      document.getElementById('tt-time').textContent = formatSeconds(j.elapsed);
+      document.getElementById('tt-walltime').textContent = j.limit_str || 'N/A';
+      document.getElementById('tt-node').textContent = j.node || 'Pending';
+
+      // Icon & Botanical Specimen type
+      const iconEl = document.getElementById('tt-icon');
+      if (j.is_seed) {
+        iconEl.textContent = '🌱';
+      } else if (j.is_independent || j.name.includes('h90')) {
+        iconEl.textContent = '🌻';
+      } else {
+        iconEl.textContent = '🌸';
+      }
+
+      // Botanical Progress Meter (Elapsed runtime vs Slurm walltime limit)
+      const limitSec = j.walltime || 3600;
+      const pct = Math.min(100, Math.max(1, Math.round((j.elapsed / Math.max(1, limitSec)) * 100)));
+      document.getElementById('tt-progress-pct').textContent = `${pct}%`;
+      document.getElementById('tt-progress-bar').style.width = `${pct}%`;
+
+      // Dependency Source
+      let depText = 'Independent Bloom (Self-standing)';
+      if (j.parents && j.parents.length > 0) {
+        depText = `Nourished by job #${j.parents.join(', #')}`;
+      } else if (j.is_seed) {
+        depText = 'Connected to Cluster via Mountain Brook';
+      } else if (j.status === 'PENDING') {
+        depText = 'Queued (Awaiting Cluster Allocation)';
+      }
+      document.getElementById('tt-dep').textContent = depText;
+
+      // Smooth Positioning with Screen Boundary Safety
+      tooltip.style.display = 'block';
+      let tx = flower.screenHeadX;
+      let ty = flower.screenHeadY - 20;
+
+      // Keep within viewport margins
+      if (tx < 170) tx = 170;
+      if (tx > width - 170) tx = width - 170;
+      if (ty < 220) ty = flower.screenHeadY + 45; // Flip below if near top
+      tooltip.style.left = `${tx}px`;
+      tooltip.style.top = `${ty}px`;
+    }
+
+    // View Switcher Tabs: Toggle between Floral Meadow and Telemetric Dashboard
+    const tabFloral = document.getElementById('tab-floral-view');
+    const tabTelemetry = document.getElementById('tab-telemetry-view');
+    const telemetryViewEl = document.getElementById('telemetry-view');
+    const hudFiltersWrapper = document.querySelector('.hud-filters-wrapper');
+    const hudScrollLeft = document.getElementById('hud-scroll-left');
+    const hudScrollRight = document.getElementById('hud-scroll-right');
+    const hudLayers = document.querySelector('.hud-layers');
+
+    if (tabFloral && tabTelemetry) {
+      tabFloral.addEventListener('click', () => {
+        activeView = 'floral';
+        tabFloral.classList.add('active');
+        tabTelemetry.classList.remove('active');
+        if (telemetryViewEl) telemetryViewEl.style.display = 'none';
+        if (hudFiltersWrapper) hudFiltersWrapper.style.display = 'block';
+        if (hudScrollLeft) hudScrollLeft.style.display = 'flex';
+        if (hudScrollRight) hudScrollRight.style.display = 'flex';
+        if (hudLayers) hudLayers.style.display = 'flex';
+      });
+
+      tabTelemetry.addEventListener('click', () => {
+        activeView = 'telemetry';
+        tabTelemetry.classList.add('active');
+        tabFloral.classList.remove('active');
+        if (telemetryViewEl) telemetryViewEl.style.display = 'block';
+        if (hudFiltersWrapper) hudFiltersWrapper.style.display = 'none';
+        if (hudScrollLeft) hudScrollLeft.style.display = 'none';
+        if (hudScrollRight) hudScrollRight.style.display = 'none';
+        if (hudLayers) hudLayers.style.display = 'none';
+        renderTelemetryDashboard();
+      });
+    }
+
+    const recenterBtn = document.getElementById('btn-recenter');
+    if (recenterBtn) {
+      recenterBtn.addEventListener('click', () => {
+        camera.hasUserMoved = false;
+        autoAdjustView(true);
+      });
+    }
+
+    // Double-click meadow canvas anytime to auto-frame view
+    canvas.addEventListener('dblclick', () => {
+      camera.hasUserMoved = false;
+      autoAdjustView(true);
+    });
+
+    const breezeSlider = document.getElementById('breeze-slider');
+    if (breezeSlider) {
+      breezeSlider.addEventListener('input', (e) => {
+        breezeStrength = parseFloat(e.target.value);
+      });
+    }
+
+    const refreshBtn = document.getElementById('btn-refresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', fetchClusterJobs);
+    }
+
+    // Enhanced Horizontal Scrolling for Cluster Bar (Mouse wheel, Drag-to-scroll, and Nav Arrows)
+    const clusterBarEl = document.getElementById('cluster-bar');
+    const scrollLeftBtn = document.getElementById('hud-scroll-left');
+    const scrollRightBtn = document.getElementById('hud-scroll-right');
+
+    if (clusterBarEl) {
+      // 1. Mouse wheel horizontal scrolling
+      clusterBarEl.addEventListener('wheel', (e) => {
+        if (e.deltaY !== 0 || e.deltaX !== 0) {
+          e.preventDefault();
+          clusterBarEl.scrollLeft += (e.deltaY || e.deltaX) * 1.2;
+        }
+      }, { passive: false });
+
+      // 2. Click and Drag to scroll
+      let isBarDown = false;
+      let barStartX = 0;
+      let barScrollLeft = 0;
+
+      clusterBarEl.addEventListener('mousedown', (e) => {
+        isBarDown = true;
+        barStartX = e.pageX - clusterBarEl.offsetLeft;
+        barScrollLeft = clusterBarEl.scrollLeft;
+      });
+      window.addEventListener('mouseup', () => {
+        isBarDown = false;
+      });
+      clusterBarEl.addEventListener('mousemove', (e) => {
+        if (!isBarDown) return;
+        e.preventDefault();
+        const x = e.pageX - clusterBarEl.offsetLeft;
+        const walk = (x - barStartX) * 1.5;
+        clusterBarEl.scrollLeft = barScrollLeft - walk;
+      });
+
+      // 3. Navigation Arrows
+      if (scrollLeftBtn) {
+        scrollLeftBtn.addEventListener('click', () => {
+          clusterBarEl.scrollBy({ left: -220, behavior: 'smooth' });
+        });
+      }
+      if (scrollRightBtn) {
+        scrollRightBtn.addEventListener('click', () => {
+          clusterBarEl.scrollBy({ left: 220, behavior: 'smooth' });
+        });
+      }
+    }
+
+    // View Toggles: Seeds Connections
+    const toggleSeeds = document.getElementById('toggle-seeds');
+    if (toggleSeeds) {
+      toggleSeeds.addEventListener('click', () => {
+        showSeeds = !showSeeds;
+        toggleSeeds.classList.toggle('active', showSeeds);
+      });
+    }
+
+    const toggleNodes = document.getElementById('toggle-nodes');
+    if (toggleNodes) {
+      toggleNodes.addEventListener('click', () => {
+        showNodeLabels = !showNodeLabels;
+        toggleNodes.classList.toggle('active', showNodeLabels);
+      });
+    }
+
+    const toggleBeds = document.getElementById('toggle-beds');
+    if (toggleBeds) {
+      toggleBeds.addEventListener('click', () => {
+        highlightBeds = !highlightBeds;
+        toggleBeds.classList.toggle('active', highlightBeds);
+      });
+    }
+
+    // Frequent Live Sync Polling: Refreshes every 2.0 seconds with live Slurm telemetry
+    setInterval(() => {
+      if (!document.hidden) fetchClusterJobs();
+    }, 2000);
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) fetchClusterJobs();
+    });
+
+    /* =========================================================================
+       7. AUTHENTICATION & PERSISTENT SESSION MANAGEMENT
+       ========================================================================= */
+    const authOverlay = document.getElementById('auth-overlay');
+    const authForm = document.getElementById('auth-form');
+    const authCloseBtn = document.getElementById('auth-close-btn');
+    const userDisplayName = document.getElementById('user-display-name');
+    const userBtn = document.getElementById('btn-user-profile');
+    const btnLogin = document.getElementById('btn-login');
+    const btnLogout = document.getElementById('btn-logout');
+
+    function showLoginModal() {
+      authOverlay.style.display = 'flex';
+      const currentUser = localStorage.getItem('floraflow_user');
+      userDisplayName.textContent = currentUser || 'Guest';
+      if (currentUser) {
+        if (btnLogout) btnLogout.style.display = 'inline-flex';
+        if (btnLogin) btnLogin.style.display = 'none';
+      } else {
+        if (btnLogout) btnLogout.style.display = 'none';
+        if (btnLogin) btnLogin.style.display = 'inline-flex';
+      }
+      const userField = document.getElementById('input-username');
+      if (userField && !userField.value) userField.value = currentUser || 'vishaal';
+      const passField = document.getElementById('input-password');
+      if (passField) {
+        passField.value = '';
+        setTimeout(() => passField.focus(), 60);
+      }
+    }
+
+    function setAuthenticatedUser(username) {
+      if (authOverlay) authOverlay.style.display = 'none';
+      if (userDisplayName) userDisplayName.textContent = username;
+      if (btnLogout) btnLogout.style.display = 'inline-flex';
+      if (btnLogin) btnLogin.style.display = 'none';
+      camera.hasUserMoved = false;
+      window.__hasInitiallyAdjusted = false;
+      fetchClusterJobs();
+    }
+    window.showLoginModal = showLoginModal;
+    window.setAuthenticatedUser = setAuthenticatedUser;
+
+    // Modal dismiss behavior
+    if (authCloseBtn) {
+      authCloseBtn.addEventListener('click', () => {
+        if (authOverlay) authOverlay.style.display = 'none';
+      });
+    }
+
+    if (authOverlay) {
+      authOverlay.addEventListener('click', (e) => {
+        if (e.target === authOverlay) {
+          authOverlay.style.display = 'none';
+        }
+      });
+    }
+
+    // Clicking Guest or User Profile opens login / account modal
+    if (userBtn) {
+      userBtn.addEventListener('click', () => {
+        showLoginModal();
+      });
+    }
+
+    // Clicking Login button opens login modal
+    if (btnLogin) {
+      btnLogin.addEventListener('click', () => {
+        showLoginModal();
+      });
+    }
+
+    // Check if an authenticated user session exists in localStorage
+    const savedUser = localStorage.getItem('floraflow_user');
+    if (savedUser) {
+      // User is already verified: resume session seamlessly without re-asking
+      setAuthenticatedUser(savedUser);
+    } else {
+      // First visit or logged out: require login verification
+      if (userDisplayName) userDisplayName.textContent = 'Guest';
+      if (btnLogout) btnLogout.style.display = 'none';
+      if (btnLogin) btnLogin.style.display = 'inline-flex';
+      showLoginModal();
+    }
+
+    if (authForm) {
+      authForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('input-username').value.trim();
+      const password = document.getElementById('input-password').value.trim();
+      const submitBtn = document.getElementById('auth-submit-btn');
+
+      if (!username || !password) {
+        alert('Please enter both your HPC username and password.');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verifying...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          // Success: Save in localStorage so user remains logged in across reloads
+          localStorage.setItem('floraflow_user', username);
+          if (data.token) localStorage.setItem('floraflow_token', data.token);
+          setAuthenticatedUser(username);
+        } else {
+          alert(data.error || 'Invalid credentials. Please check your username and password.');
+          const passField = document.getElementById('input-password');
+          if (passField) {
+            passField.value = '';
+            passField.focus();
+          }
+        }
+      } catch (err) {
+        alert('Could not connect to authentication service. Please check your connection.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enter Floral Meadow';
+      }
+    });
+  }
+
+    if (btnLogout) {
+      btnLogout.addEventListener('click', () => {
+        localStorage.removeItem('floraflow_user');
+        localStorage.removeItem('floraflow_token');
+        flowerEntities = [];
+        liveJobs = [];
+        liveClusters = [];
+        liveDependencies = [];
+        liveCompletedJobs = [];
+        userDisplayName.textContent = 'Guest';
+        btnLogout.style.display = 'none';
+        if (btnLogin) btnLogin.style.display = 'inline-flex';
+        const clusterBar = document.getElementById('cluster-bar');
+        if (clusterBar) clusterBar.innerHTML = '<div class="cluster-tag active" data-cluster="all">🌿 All (0)</div>';
+        renderTelemetryDashboard();
+        showLoginModal();
+      });
+    }
+  </script>
+</body>
+</html>
