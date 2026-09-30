@@ -682,6 +682,16 @@
       color: #34d399;
       border: 1px solid rgba(52, 211, 153, 0.3);
     }
+    .state-running {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .state-pending {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.35);
+    }
     .state-failed {
       background: rgba(239, 68, 68, 0.2);
       color: #f87171;
@@ -1064,14 +1074,14 @@
         <div class="telemetry-grid" id="telemetry-active-grid"></div>
       </div>
 
-      <!-- Last Completed Jobs Section -->
+      <!-- Recent Jobs History Section -->
       <div class="telemetry-section">
         <div class="telemetry-section-header">
           <div class="section-title">
-            <span class="section-icon">🏁</span>
-            <h3>Recently Completed Jobs (Slurm Accounting)</h3>
+            <span class="section-icon">📜</span>
+            <h3>Recent Slurm Workloads History (All States & Accounting)</h3>
           </div>
-          <span class="section-badge" id="telemetry-completed-count">0 Completed</span>
+          <span class="section-badge" id="telemetry-completed-count">0 Recent Jobs</span>
         </div>
         <div class="telemetry-completed-table-wrapper">
           <table class="telemetry-table" id="telemetry-completed-table">
@@ -1080,11 +1090,11 @@
                 <th>Status</th>
                 <th>Job ID</th>
                 <th>Job Name</th>
+                <th>Exit Code & Message</th>
                 <th>Duration</th>
                 <th>Compute Node(s)</th>
                 <th>Started</th>
                 <th>Finished</th>
-                <th>Exit Code</th>
               </tr>
             </thead>
             <tbody id="telemetry-completed-tbody"></tbody>
@@ -1459,22 +1469,28 @@
         }
       }
 
-      // 3. Recently Completed Jobs Table
+      // 3. Recent Jobs History Table (All recent workloads & exit messages)
       const completedTbody = document.getElementById('telemetry-completed-tbody');
       const completedCountBadge = document.getElementById('telemetry-completed-count');
-      if (completedCountBadge) completedCountBadge.textContent = `${liveCompletedJobs.length} Jobs Finished`;
+      if (completedCountBadge) completedCountBadge.textContent = `${liveCompletedJobs.length} Recent Jobs`;
 
       if (completedTbody) {
         completedTbody.innerHTML = '';
         if (liveCompletedJobs.length === 0) {
-          completedTbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #94a3b8; padding: 24px;">No recently completed Slurm jobs found.</td></tr>';
+          completedTbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #94a3b8; padding: 24px;">No recent Slurm jobs found in accounting.</td></tr>';
         } else {
           liveCompletedJobs.forEach(job => {
             const tr = document.createElement('tr');
             
             let stateClass = 'state-completed';
             let stateIcon = '✅';
-            if (job.state === 'FAILED' || job.state === 'NODE_FAIL' || job.state === 'OUT_OF_MEMORY') {
+            if (job.state === 'RUNNING') {
+              stateClass = 'state-running';
+              stateIcon = '⚡';
+            } else if (job.state === 'PENDING') {
+              stateClass = 'state-pending';
+              stateIcon = '⏳';
+            } else if (job.state === 'FAILED' || job.state === 'NODE_FAIL' || job.state === 'OUT_OF_MEMORY') {
               stateClass = 'state-failed';
               stateIcon = '❌';
             } else if (job.state === 'CANCELLED') {
@@ -1485,15 +1501,48 @@
               stateIcon = '⏱️';
             }
 
+            const isSuccess = job.exit_code === '0:0' && job.state === 'COMPLETED';
+            const isRunning = job.state === 'RUNNING';
+            const isPending = job.state === 'PENDING';
+            const isFailed = job.state === 'FAILED' || job.state === 'NODE_FAIL' || job.state === 'OUT_OF_MEMORY' || (job.exit_code && job.exit_code !== '0:0' && !isRunning && !isPending);
+            
+            let exitBadgeColor = '#34d399';
+            let exitBadgeBg = 'rgba(16, 185, 129, 0.12)';
+            let exitBadgeBorder = 'rgba(52, 211, 153, 0.28)';
+            if (isFailed) {
+              exitBadgeColor = '#f87171';
+              exitBadgeBg = 'rgba(239, 68, 68, 0.15)';
+              exitBadgeBorder = 'rgba(248, 113, 113, 0.3)';
+            } else if (isRunning) {
+              exitBadgeColor = '#38bdf8';
+              exitBadgeBg = 'rgba(56, 189, 248, 0.15)';
+              exitBadgeBorder = 'rgba(56, 189, 248, 0.3)';
+            } else if (isPending) {
+              exitBadgeColor = '#fbbf24';
+              exitBadgeBg = 'rgba(251, 191, 36, 0.15)';
+              exitBadgeBorder = 'rgba(251, 191, 36, 0.3)';
+            }
+
+            const exitMsg = job.exit_code_msg || (job.exit_code ? `Code ${job.exit_code}` : (job.reason || 'N/A'));
+
             tr.innerHTML = `
               <td><span class="state-badge ${stateClass}">${stateIcon} ${job.state}</span></td>
               <td style="font-family: 'JetBrains Mono', monospace; color: #38bdf8; font-weight: 600;">#${job.id}</td>
               <td style="font-weight: 600; color: #f8fafc;">${job.name}</td>
-              <td style="font-family: 'JetBrains Mono', monospace; color: #fbbf24;">⏱️ ${job.elapsed}</td>
+              <td>
+                <div style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: ${exitBadgeBg}; border: 1px solid ${exitBadgeBorder};">
+                  <span style="font-family: 'JetBrains Mono', monospace; color: ${exitBadgeColor}; font-weight: 700; font-size: 11px;">
+                    ${job.exit_code || '0:0'}
+                  </span>
+                  <span style="font-size: 11px; color: ${exitBadgeColor}; font-weight: 500;">
+                    • ${exitMsg}
+                  </span>
+                </div>
+              </td>
+              <td style="font-family: 'JetBrains Mono', monospace; color: #fbbf24;">⏱️ ${job.elapsed || '00:00:00'}</td>
               <td style="font-family: 'JetBrains Mono', monospace; color: #94a3b8;">🖥️ ${job.nodes}</td>
               <td style="color: #94a3b8; font-size: 11px;">${job.start_time}</td>
               <td style="color: #94a3b8; font-size: 11px;">${job.end_time}</td>
-              <td style="font-family: 'JetBrains Mono', monospace; color: ${job.exit_code === '0:0' ? '#34d399' : '#f87171'};">${job.exit_code}</td>
             `;
             completedTbody.appendChild(tr);
           });

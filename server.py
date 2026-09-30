@@ -406,38 +406,110 @@ def fetch_live_slurm_jobs(user=None):
 
     return processed_jobs, clusters_list, dependencies
 
-def fetch_recent_completed_jobs(user, limit=15):
+def get_exit_message(state, exit_code, reason=None):
+    if not exit_code:
+        exit_code = "0:0"
+    parts = exit_code.split(":")
+    try:
+        code = int(parts[0])
+    except Exception:
+        code = 0
+    try:
+        signal = int(parts[1]) if len(parts) > 1 else 0
+    except Exception:
+        signal = 0
+
+    if state == "COMPLETED":
+        if code == 0 and signal == 0:
+            return "Success (0:0)"
+        return f"Completed (Code {code}:{signal})"
+    elif state == "RUNNING":
+        return "Running Live"
+    elif state == "PENDING":
+        if reason and reason not in ("None", "None assigned", "(null)"):
+            return f"Queued ({reason})"
+        return "Queued (Awaiting Allocation)"
+    elif state == "FAILED":
+        if code == 1:
+            return "General Error (1)"
+        elif code == 2:
+            return "Misuse of Shell Builtins (2)"
+        elif code == 126:
+            return "Permission Denied (126)"
+        elif code == 127:
+            return "Command Not Found (127)"
+        elif code == 130 or signal == 2:
+            return "SIGINT / Interrupted (130)"
+        elif code == 137 or signal == 9:
+            return "Out Of Memory / SIGKILL (137)"
+        elif code == 143 or signal == 15:
+            return "SIGTERM / Cancelled (143)"
+        elif signal > 0:
+            return f"Terminated by Signal {signal} ({exit_code})"
+        return f"Failed with Exit Code {exit_code}"
+    elif state == "CANCELLED":
+        return "Cancelled by User / Slurm"
+    elif state == "TIMEOUT":
+        return "Walltime Limit Exceeded"
+    elif state == "OUT_OF_MEMORY":
+        return "Out Of Memory (OOM Killer)"
+    elif state == "NODE_FAIL":
+        return "Compute Node Hardware Failure"
+    else:
+        if reason and reason not in ("None", "None assigned", "(null)"):
+            return f"{state} ({reason})"
+        return f"{state} ({exit_code})"
+
+def fetch_recent_completed_jobs(user, limit=30):
     try:
         cmd = [
             "sacct", "-u", user,
-            "--format=JobID,JobName,State,ExitCode,Elapsed,Start,End,NodeList",
+            "--format=JobID,JobName,State,ExitCode,DerivedExitCode,Reason,Elapsed,Start,End,NodeList",
             "-n", "-P", "-X"
         ]
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3)
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
         if res.returncode != 0:
             return []
 
         lines = [ln.strip() for ln in res.stdout.strip().split("\n") if ln.strip()]
-        completed_list = []
+        recent_list = []
         for line in reversed(lines):
             parts = line.split("|")
             if len(parts) < 8:
                 continue
-            jid, jname, state, exit_code, elapsed, start_t, end_t, nodes = parts[:8]
-            if state in ("COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY"):
-                completed_list.append({
-                    "id": jid,
-                    "name": jname,
-                    "state": state,
-                    "exit_code": exit_code,
-                    "elapsed": elapsed,
-                    "start_time": start_t if start_t != "Unknown" else "N/A",
-                    "end_time": end_t if end_t != "Unknown" else "N/A",
-                    "nodes": nodes if nodes and nodes != "None assigned" else "N/A"
-                })
-                if len(completed_list) >= limit:
-                    break
-        return completed_list
+            jid = parts[0]
+            jname = parts[1]
+            state = parts[2]
+            exit_code = parts[3]
+            derived_code = parts[4] if len(parts) > 4 else ""
+            reason = parts[5] if len(parts) > 5 else ""
+            elapsed = parts[6] if len(parts) > 6 else ""
+            start_t = parts[7] if len(parts) > 7 else ""
+            end_t = parts[8] if len(parts) > 8 else ""
+            nodes = parts[9] if len(parts) > 9 else ""
+
+            # Use derived code if primary exit code is 0:0 but derived code is set
+            eff_exit_code = exit_code
+            if exit_code == "0:0" and derived_code and derived_code not in ("0:0", "None"):
+                eff_exit_code = derived_code
+
+            exit_msg = get_exit_message(state, eff_exit_code, reason)
+
+            recent_list.append({
+                "id": jid,
+                "name": jname,
+                "state": state,
+                "exit_code": eff_exit_code,
+                "exit_code_msg": exit_msg,
+                "reason": reason if reason not in ("None", "None assigned", "(null)") else "",
+                "elapsed": elapsed,
+                "start_time": start_t if start_t != "Unknown" else "N/A",
+                "end_time": end_t if end_t != "Unknown" else ("In Progress" if state == "RUNNING" else "N/A"),
+                "nodes": nodes if nodes and nodes not in ("None assigned", "(null)") else "Pending Allocation"
+            })
+            if len(recent_list) >= limit:
+                break
+        return recent_list
     except Exception as e:
         return []
 
