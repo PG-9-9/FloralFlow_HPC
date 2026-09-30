@@ -1,37 +1,10 @@
 # 🌸 FloralFlow HPC
 
-> **A Botanical Digital Twin & Real-Time Telemetry Dashboard for High Performance Computing (Slurm)**
-
-[![Python 3](https://img.shields.io/badge/Python-3.7+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org)
-[![Slurm Workload Manager](https://img.shields.io/badge/Slurm-Workloads-00599C?style=for-the-badge)](https://slurm.schedmd.com)
-[![Cloudflare Tunnel](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://cloudflare.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald?style=for-the-badge)](LICENSE)
-
-**FloralFlow HPC** transforms complex, monochrome cluster queue data (`squeue`, `sacct`) into an interactive, high-craft 3D botanical sanctuary and real-time telemetric command center.
+> **Real-time Botanical Digital Twin & Telemetric Dashboard for Slurm Clusters**
 
 ---
 
-## 🌟 Key Features
-
-* **🌸 Floral Meadow View**:
-  * Real-time 3D botanical simulation rendered on Canvas.
-  * Every running job grows into an organic flower with stems, petals, and dynamic breeze simulation.
-  * Walltime progress is reflected directly in botanical growth.
-  * Dependent job arrays flow through scenic mountain brooks connecting to parent nodes.
-* **📊 Telemetric View**:
-  * Glanceable cluster KPIs (Running jobs, Pending/Queue limits, Active GPU nodes, Recently finished).
-  * Continuous second-by-second ticking elapsed timers.
-  * Accounting table powered by Slurm `sacct` with exit codes, compute node mappings, and walltimes.
-* **🌐 Zero-Root Cloudflare Tunnel**:
-  * Generates an end-to-end encrypted public HTTPS URL (`https://xxxx.trycloudflare.com`).
-  * Runs entirely in user-space on login nodes or compute nodes — **no `sudo`, no root, and no firewall configuration required**.
-* **🔒 Seamless Authentication**:
-  * Encrypted password authentication with persistent session storage.
-  * Instant password setup and reset directly via command-line arguments.
-
----
-
-## 🚀 Quickstart (Any HPC User)
+## 🚀 Quickstart
 
 ### 1. Clone the Repository
 ```bash
@@ -46,52 +19,37 @@ chmod +x start_online.sh
 
 ### 3. Launch with Your Password
 ```bash
-./start_online.sh -p myClusterPassword
+./start_online.sh -p mySecretPass123
 ```
 
-**That's it!** The script will:
-1. Automatically download the standalone user-space `cloudflared` binary if not present.
-2. Initialize your user credentials.
-3. Start the lightweight backend daemon.
-4. Output your secure public HTTPS URL:
+> **👤 What is my username?**
+> Your username is simply your **HPC username** (the username you use to SSH into your cluster, i.e. the output of `whoami`). It is automatically detected from your HPC environment (`$USER`).
+
+The script automatically downloads `cloudflared` (no root/sudo needed), starts the backend, and gives you a secure public HTTPS URL:
 
 ```text
 ==========================================================
  🌸 FloralFlow HPC is LIVE Online!
 ==========================================================
- 👤 Slurm User : your_username
+ 👤 Slurm User : vishaal
  🌐 Public URL : https://your-tunnel-url.trycloudflare.com
  💡 Change pass: ./start_online.sh -p <new_password>
  🛑 To Stop    : ./start_online.sh --stop
 ==========================================================
 ```
 
-Open the link on your phone, tablet, or laptop to view your HPC jobs in real time!
+Open the link in any web browser (phone, tablet, or laptop) and log in using your HPC username (e.g. `vishaal`) and the password you set.
 
 ---
 
-## ⚙️ Command-Line Options
+## ⚙️ Command-Line Options & Examples
 
-The launcher (`start_online.sh`) and Python backend (`server.py`) accept arguments to customize your run:
-
-| Option | Example | Description |
+| Option | Description | Example (using `vishaal`) |
 | :--- | :--- | :--- |
-| `-p`, `--password <pass>` | `./start_online.sh -p myPass123` | Set or update your cluster login password |
-| `-u`, `--user <username>` | `./start_online.sh -u other_user` | Monitor a specific HPC user's jobs (default: `$USER`) |
-| `--port <port>` | `./start_online.sh --port 8090` | Set a custom local backend port (default: `8089`) |
-| `--reset-password` | `./start_online.sh --reset-password` | Interactively change your password |
-| `--stop` | `./start_online.sh --stop` | Stop all running FloralFlow servers & tunnels |
-| `-h`, `--help` | `./start_online.sh --help` | Show command usage and options |
-
----
-
-## 🛠️ Architecture & Security
-
-* **Self-Contained Backend**: Written in standard Python 3 with zero required pip dependencies.
-* **Cluster Privacy**: Your cluster credentials (`.users.json`), logs, and tunnel files are git-ignored and stored locally with SHA-256 password hashing.
-* **Encrypted Gateway**: Cloudflare Quick Tunnels proxy the local HTTP server over encrypted TLS without opening any public listening ports on your HPC login node.
-
----
-
-## 📄 License
-Released under the [MIT License](LICENSE).
+| **Default Launch** | Starts with current user and existing/default credentials | `./start_online.sh` |
+| `-p`, `--password <pass>` | Set or update your cluster login password | `./start_online.sh -u vishaal -p slurm2026` |
+| `-u`, `--user <username>` | Specify the Slurm user to monitor (defaults to your `$USER`) | `./start_online.sh -u vishaal` |
+| `--port <port>` | Run backend on a custom local port | `./start_online.sh -u vishaal --port 8090` |
+| `--reset-password` | Prompt interactively to change your password | `./start_online.sh -u vishaal --reset-password` |
+| `--stop` | Terminate running FloralFlow server and Cloudflare tunnel | `./start_online.sh --stop` |
+| `-h`, `--help` | Display command usage and options | `./start_online.sh -h` |
