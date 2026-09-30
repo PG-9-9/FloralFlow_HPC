@@ -1,0 +1,17 @@
+# Credentials & Security
+.users.json
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Runtime Logs & URLs
+*.log
+online_url.txt
+nohup.out
+
+# Temp / Scratch files
+scratch/
+scratch_script.js
+.DS_Store

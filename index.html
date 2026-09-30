@@ -1153,11 +1153,11 @@
       <form id="auth-form" style="margin-top: 20px;">
         <div class="form-group">
           <label for="input-username">HPC Username</label>
-          <input type="text" id="input-username" class="form-control" placeholder="e.g. vishaal" required value="vishaal">
+          <input type="text" id="input-username" class="form-control" placeholder="Enter your HPC username" required>
         </div>
         <div class="form-group">
           <label for="input-password">Cluster Token / Password</label>
-          <input type="password" id="input-password" class="form-control" placeholder="Enter cluster password (e.g. slurm2026)" required autocomplete="current-password">
+          <input type="password" id="input-password" class="form-control" placeholder="Enter cluster password" required autocomplete="current-password">
         </div>
 
         <button type="submit" class="btn btn-primary auth-submit" id="auth-submit-btn">
@@ -1172,6 +1172,21 @@
   </div>
 
   <script>
+    // Detect system user dynamically from backend
+    let detectedClusterUser = "";
+    fetch('/api/system/info')
+      .then(res => res.json())
+      .then(info => {
+        if (info && info.default_user) {
+          detectedClusterUser = info.default_user;
+          const userField = document.getElementById('input-username');
+          if (userField && !userField.value) {
+            userField.value = detectedClusterUser;
+          }
+        }
+      })
+      .catch(() => {});
+
     // Early global declaration so inline triggers always work immediately
     window.showLoginModal = function() {
       const modal = document.getElementById('auth-overlay');
@@ -1189,7 +1204,9 @@
         if (inBtn) inBtn.style.display = 'inline-flex';
       }
       const userField = document.getElementById('input-username');
-      if (userField && !userField.value) userField.value = currentUser || 'vishaal';
+      if (userField && !userField.value) {
+        userField.value = currentUser || detectedClusterUser || '';
+      }
       const passField = document.getElementById('input-password');
       if (passField) {
         passField.value = '';
@@ -2944,7 +2961,7 @@
         if (btnLogin) btnLogin.style.display = 'inline-flex';
       }
       const userField = document.getElementById('input-username');
-      if (userField && !userField.value) userField.value = currentUser || 'vishaal';
+      if (userField && !userField.value) userField.value = currentUser || detectedClusterUser || '';
       const passField = document.getElementById('input-password');
       if (passField) {
         passField.value = '';

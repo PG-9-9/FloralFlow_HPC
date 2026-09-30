@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-FloraFlow HPC Backend Server v7
-- Active cluster fields placed with clear spatial separation (e.g. h90s42_f25 on left, seh42_resume in center)
-- Dependent seeds arranged symmetrically in an orbit / ring around the bottom/outer perimeter of the main cluster
-- Continuous live timing metrics
+FloraFlow HPC Backend Server v8
+- Active cluster fields placed with clear spatial separation
+- Dependent seeds arranged symmetrically around main clusters
+- Real-time Slurm job metrics & accounting
+- Streamlined credential management and multi-user support
 """
 
 import os
@@ -19,15 +20,37 @@ import re
 import math
 import gzip
 import threading
+import getpass
+import argparse
+import secrets
 
-PORT = 8089
+DEFAULT_USER = os.environ.get("USER") or getpass.getuser() or "user"
+PORT = int(os.environ.get("FLORA_PORT", 8089))
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_FILE = os.path.join(APP_DIR, ".users.json")
 
-if not os.path.exists(CREDENTIALS_FILE):
-    default_pass_hash = hashlib.sha256("slurm2026".encode()).hexdigest()
+def get_users():
+    if os.path.exists(CREDENTIALS_FILE):
+        try:
+            with open(CREDENTIALS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def set_user_password(username, password):
+    users = get_users()
+    users[username] = hashlib.sha256(password.encode()).hexdigest()
     with open(CREDENTIALS_FILE, "w") as f:
-        json.dump({"vishaal": default_pass_hash}, f)
+        json.dump(users, f, indent=2)
+    return True
+
+def verify_user_password(username, password):
+    users = get_users()
+    if not users:
+        return False
+    pass_hash = hashlib.sha256(password.encode()).hexdigest()
+    return users.get(username) == pass_hash
 
 PALETTES = [
     {"flower": "sunflower", "color": "#fbbf24", "petals": 12, "name": "Sunflower"},
@@ -73,7 +96,7 @@ def parse_dependency_parents(dep_str):
 
 def fetch_live_slurm_jobs(user=None):
     if not user:
-        user = os.environ.get("USER", "vishaal")
+        user = DEFAULT_USER
 
     cmd = ["squeue", "-u", user, "-o", "%i|%j|%T|%M|%l|%N|%P|%r|%E|%S"]
     try:
@@ -471,9 +494,24 @@ class MeadowHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
+        if url.path == "/api/system/info":
+            users = get_users()
+            resp = {
+                "default_user": DEFAULT_USER,
+                "port": PORT,
+                "has_users": len(users) > 0,
+                "users": list(users.keys())
+            }
+            body = json.dumps(resp).encode("utf-8")
+            try:
+                self.send_compressed(body, "application/json; charset=utf-8", "no-cache")
+            except BrokenPipeError:
+                pass
+            return
+
         if url.path == "/api/jobs":
             query = urllib.parse.parse_qs(url.query)
-            user = query.get("user", [os.environ.get("USER", "vishaal")])[0]
+            user = query.get("user", [DEFAULT_USER])[0]
             payload = get_cached_slurm_jobs(user)
             body = json.dumps(payload).encode("utf-8")
             try:
@@ -509,22 +547,13 @@ class MeadowHandler(http.server.SimpleHTTPRequestHandler):
                 if not username or not password:
                     resp = {"success": False, "error": "Username and password are required"}
                 else:
-                    users = {}
-                    if os.path.exists(CREDENTIALS_FILE):
-                        with open(CREDENTIALS_FILE, "r") as f:
-                            users = json.load(f)
-
-                    pass_hash = hashlib.sha256(password.encode()).hexdigest()
-                    if username in users:
-                        if users[username] == pass_hash:
-                            token = f"token_{username}_{int(time.time())}"
-                            resp = {"success": True, "token": token, "user": username}
-                        else:
-                            resp = {"success": False, "error": "Invalid username or password"}
-                    elif username == os.environ.get("USER"):
-                        users[username] = pass_hash
-                        with open(CREDENTIALS_FILE, "w") as f:
-                            json.dump(users, f)
+                    users = get_users()
+                    if verify_user_password(username, password):
+                        token = f"token_{username}_{int(time.time())}"
+                        resp = {"success": True, "token": token, "user": username}
+                    elif not users:
+                        # Auto-enroll on first launch if no passwords configured
+                        set_user_password(username, password)
                         token = f"token_{username}_{int(time.time())}"
                         resp = {"success": True, "token": token, "user": username}
                     else:
@@ -545,16 +574,15 @@ class MeadowHandler(http.server.SimpleHTTPRequestHandler):
                 username = data.get("username", "").strip()
                 password = data.get("password", "").strip()
 
-                with open(CREDENTIALS_FILE, "r") as f:
-                    users = json.load(f)
-
-                if username in users:
-                    resp = {"success": False, "error": "User already exists. Please log in."}
+                if not username or not password:
+                    resp = {"success": False, "error": "Username and password are required"}
                 else:
-                    users[username] = hashlib.sha256(password.encode()).hexdigest()
-                    with open(CREDENTIALS_FILE, "w") as f:
-                        json.dump(users, f)
-                    resp = {"success": True, "token": f"token_{username}_{int(time.time())}", "user": username}
+                    users = get_users()
+                    if username in users:
+                        resp = {"success": False, "error": "User already exists. Please log in."}
+                    else:
+                        set_user_password(username, password)
+                        resp = {"success": True, "token": f"token_{username}_{int(time.time())}", "user": username}
             except Exception as e:
                 resp = {"success": False, "error": str(e)}
 
@@ -568,15 +596,54 @@ class MeadowHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
 
-def run():
+def main():
+    global PORT, DEFAULT_USER
+    parser = argparse.ArgumentParser(description="FloralFlow HPC Web Backend")
+    parser.add_argument("-p", "--port", type=int, default=PORT, help="Port to bind the server (default: 8089)")
+    parser.add_argument("-u", "--user", type=str, default=DEFAULT_USER, help="Default Slurm username")
+    parser.add_argument("--password", "--set-password", dest="password", type=str, help="Set or update password for user")
+    parser.add_argument("--reset-password", action="store_true", help="Interactively reset password for user")
+    parser.add_argument("--only-set-password", action="store_true", help="Set password and exit without starting server")
+
+    args = parser.parse_args()
+    PORT = args.port
+    DEFAULT_USER = args.user or DEFAULT_USER
+
+    if args.password:
+        set_user_password(DEFAULT_USER, args.password)
+        print(f"🔑 Password successfully set for user '{DEFAULT_USER}'.")
+        if args.only_set_password:
+            return
+
+    elif args.reset_password:
+        new_pass = getpass.getpass(f"Enter new password for user '{DEFAULT_USER}': ").strip()
+        if not new_pass:
+            print("❌ Password cannot be empty.")
+            return
+        set_user_password(DEFAULT_USER, new_pass)
+        print(f"🔑 Password successfully updated for user '{DEFAULT_USER}'.")
+        if args.only_set_password:
+            return
+
+    # Ensure default user credentials exist on first run
+    users = get_users()
+    if not users and not args.password:
+        default_pass = "slurm2026"
+        set_user_password(DEFAULT_USER, default_pass)
+        print("=" * 60)
+        print(f"🔑 Initialized default password for user '{DEFAULT_USER}': {default_pass}")
+        print("💡 You can change your password anytime using:")
+        print(f"   python3 server.py --set-password <your_new_password>")
+        print("=" * 60)
+
     socketserver.TCPServer.allow_reuse_address = True
     with http.server.ThreadingHTTPServer(("0.0.0.0", PORT), MeadowHandler) as httpd:
-        print(f"🌿 FloraFlow HPC Server v8 (Optimized & Threaded) running at http://0.0.0.0:{PORT}")
-        print(f"Tracking Slurm user '{os.environ.get('USER', 'vishaal')}'")
+        print(f"🌸 FloralFlow HPC Server running at http://0.0.0.0:{PORT}")
+        print(f"📊 Tracking Slurm user '{DEFAULT_USER}'")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            pass
+            print("\nShutting down FloralFlow server.")
 
 if __name__ == "__main__":
-    run()
+    main()
